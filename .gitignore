@@ -16,10 +16,52 @@ pip-delete-this-directory.txt
 .pytest_cache/
 .coverage
 htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
 .hypothesis/
+pytest-cache-files-*/
 
 # venv
 .venv/
 venv/
 env/
 ENV/
+
+# secrets
+.env
+.env.*
+.envrc
+docker-compose.override.yml
+secrets/
+credentials.json
+*.pem
+.pypirc
+.streamlit/secrets.toml
+
+# iot-api
+*.log
+db.sqlite3
+
+# tools
+.mypy_cache/
+.ruff_cache/
+.pytype/
+.pyre/
+.dmypy.json
+
+# ide
+.idea/
+.vscode/*
+!.vscode/settings.json
+
+# os
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# misc
+tempCodeRunnerFile.py
+*.manifest
+*.spec

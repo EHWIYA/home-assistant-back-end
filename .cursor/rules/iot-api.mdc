@@ -1,0 +1,45 @@
+---
+description: iot-api BFF — HA 전용, API 계약, 레이어 규칙
+alwaysApply: true
+---
+
+# iot-api 에이전트
+
+이 repo는 **iot-web**용 FastAPI BFF. **Home Assistant만** 데이터 소스 (SmartThings/AIPM/DB 직접 연동 금지).
+
+프로젝트는 **프론트 · 백엔드(이 repo) · 서버** 3파트 — 협업 시 `three-part-collaboration.mdc` 참고.
+
+## 스택
+
+Python 3.11+, FastAPI, httpx, Pydantic v2, uvicorn. 프로덕션 Docker `127.0.0.1:8002` → nginx `https://iot-api.iwhya.kr`.
+
+## 레이어
+
+| 위치 | 역할 |
+|------|------|
+| `app/routers/` | HTTP 입출력만 (얇게) |
+| `app/services/ha_client.py` | HA REST **유일** 진입점 |
+| `app/services/status_builder.py` | entity → DTO, 50W 판별, null |
+| `app/constants.py` | `entity_id` 한곳 |
+| `app/models/schemas.py` | 프론트 `types.ts`와 맞는 JSON |
+
+## 인증·에러
+
+- 프론트 → API: `X-API-Key` (`IOT_API_KEY`)
+- API → HA: `Authorization: Bearer` (`HA_TOKEN`)
+- 에러: `{ "detail": "...", "code": "..." }` — 401 unauthorized, 502/503/504 HA
+
+## v1 API
+
+- `GET /health` — 키 없음
+- `GET /api/v1/status`, `POST /api/v1/plug` — 키 필요
+- `GET /api/v1/history/power` — v1.1
+- AC/Broadlink — 2단계, 미구현 시 추가만
+
+## 변경 시
+
+- 범위 최소화, 기존 패턴 유지.
+- `.env`는 에이전트 전담 (`env.mdc`), 커밋 금지.
+- 로컬 검증: `.cursor/scripts/dev-test.ps1` (Windows).
+
+상세 Handoff는 루트 `AGENTS.md` 참고.

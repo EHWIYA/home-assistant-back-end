@@ -1,0 +1,67 @@
+---
+description: Windows PowerShell — UTF-8 출력·한글 깨짐 방지, 명령 체이닝
+alwaysApply: true
+---
+
+# Windows 셸 (PowerShell)
+
+개발 환경이 **Windows + PowerShell** 입니다. 터미널/에이전트 출력에서 한글이 깨지지 않게 아래를 따릅니다.
+
+## 명령 체이닝
+
+- `&&` 사용 금지 (PowerShell 5.x에서 파싱 오류·깨진 메시지 유발).
+- 한 줄에 여러 명령: `;` 로 구분하거나 **Shell 도구를 호출마다 분리**.
+
+```powershell
+# BAD
+cd proj && pip install -r requirements.txt && pytest
+
+# GOOD
+cd proj; .\.cursor\scripts\ensure-utf8.ps1; pip install -r requirements.txt; pytest -q
+```
+
+## UTF-8 (명령 실행 전)
+
+Python/pip/pytest/git 등 **한글·유니코드가 나올 수 있는 명령 전**에 인코딩을 맞춥니다.
+
+1. **권장**: 전역 스크립트 (모든 repo 공통)
+
+```powershell
+. $env:USERPROFILE\.cursor\ensure-utf8.ps1
+```
+
+   이 repo 래퍼: `. .\.cursor\scripts\ensure-utf8.ps1` (동일 동작)
+
+2. **수동** (스크립트 없을 때만):
+
+```powershell
+chcp 65001 | Out-Null
+$OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$env:PYTHONIOENCODING = 'utf-8'
+$env:PYTHONUTF8 = '1'
+```
+
+## 테스트·의존성 설치
+
+- `pip install` / `pytest` 는 가능하면 **한 번에**:
+
+```powershell
+.\.cursor\scripts\dev-test.ps1
+```
+
+- venv 경로: `.venv\Scripts\` (Windows)
+
+## Git / 파일
+
+- 커밋 메시지·PR 본문: UTF-8 (한글 허용).
+- 소스·`.mdc`·`AGENTS.md`: UTF-8 저장.
+
+## IDE 터미널
+
+- **전역**: `%USERPROFILE%\.cursor\ensure-utf8.ps1` + Cursor User `settings.json` (기본 프로필 `PowerShell (UTF-8)`).
+- 새 터미널마다 `~\.cursor\terminal-utf8-init.ps1` 자동 실행.
+- 반영: **터미널 전부 닫기 → 새 터미널** (또는 `Developer: Reload Window`).
+
+## NAS·Linux SSH
+
+- NAS 배포·SSH 스크립트는 **bash** (`&&` 가능). Windows 로컬 규칙과 혼동하지 않기.
