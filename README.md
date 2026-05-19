@@ -27,6 +27,7 @@ curl -H "X-API-Key: YOUR_KEY" http://127.0.0.1:8002/api/v1/status
 | GET | `/health` | none |
 | GET | `/api/v1/status` | `X-API-Key` |
 | POST | `/api/v1/plug` | `X-API-Key` |
+| POST | `/api/v1/ac` | `X-API-Key` |
 | GET | `/api/v1/history/power?hours=24` | `X-API-Key` |
 
 ## NAS deploy

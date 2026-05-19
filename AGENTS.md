@@ -15,7 +15,7 @@
 ## 역할
 
 - Home Assistant REST만 호출 (`app/services/ha_client.py`)
-- `/health`, `/api/v1/status`, `/api/v1/plug`, (v1.1) `/api/v1/history/power`
+- `/health`, `/api/v1/status`, `/api/v1/plug`, `/api/v1/ac`, (v1.1) `/api/v1/history/power`
 - Docker / GHA → GHCR → NAS 배포 보조
 - SmartThings·DB·LLM·WebSocket v1 비목표
 

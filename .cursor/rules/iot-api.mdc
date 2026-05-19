@@ -34,7 +34,7 @@ Python 3.11+, FastAPI, httpx, Pydantic v2, uvicorn. 프로덕션 Docker `127.0.0
 - `GET /health` — 키 없음
 - `GET /api/v1/status`, `POST /api/v1/plug` — 키 필요
 - `GET /api/v1/history/power` — v1.1
-- AC/Broadlink — 2단계, 미구현 시 추가만
+- `POST /api/v1/ac` — `remote.send_command` (`remote.hwiya_sensor`, device `ac`)
 
 ## 변경 시
 

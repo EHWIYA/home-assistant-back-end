@@ -44,6 +44,14 @@ class PlugActionResponse(BaseModel):
     switch: Literal["on", "off", "unavailable", "unknown"]
 
 
+class AcActionRequest(BaseModel):
+    action: Literal["on", "off"]
+
+
+class AcActionResponse(BaseModel):
+    ok: bool = True
+
+
 class PowerHistoryPoint(BaseModel):
     t: str
     w: float | None
