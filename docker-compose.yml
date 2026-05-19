@@ -2,7 +2,7 @@
 # HA on host network → use network_mode: host OR HA_BASE_URL=http://192.168.0.19:8123
 services:
   iot-api:
-    image: ghcr.io/OWNER/iot-api:latest
+    image: ghcr.io/ehwiya/home-assistant-back-end:latest
     container_name: iot-api
     restart: unless-stopped
     env_file: .env
