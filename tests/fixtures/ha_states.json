@@ -1,0 +1,34 @@
+{
+  "switch.hwiya_home": {
+    "entity_id": "switch.hwiya_home",
+    "state": "on",
+    "attributes": {}
+  },
+  "sensor.hwiya_home_power": {
+    "entity_id": "sensor.hwiya_home_power",
+    "state": "742.0",
+    "attributes": { "unit_of_measurement": "W" }
+  },
+  "sensor.hwiya_home_energy": {
+    "entity_id": "sensor.hwiya_home_energy",
+    "state": "12.34",
+    "attributes": { "unit_of_measurement": "kWh" }
+  },
+  "person.hwiya_ha": {
+    "entity_id": "person.hwiya_ha",
+    "state": "not_home",
+    "attributes": {
+      "latitude": 37.473,
+      "longitude": 126.889
+    }
+  },
+  "weather.forecast_jib": {
+    "entity_id": "weather.forecast_jib",
+    "state": "cloudy",
+    "attributes": {
+      "temperature": 18.2,
+      "humidity": 55,
+      "condition": "cloudy"
+    }
+  }
+}

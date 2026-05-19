@@ -1,0 +1,37 @@
+import json
+from pathlib import Path
+
+from app.services.status_builder import build_status_from_states
+
+FIXTURE = Path(__file__).parent / "fixtures" / "ha_states.json"
+
+
+def test_build_status_from_fixture():
+    states = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    status = build_status_from_states(states, ac_power_threshold_w=50)
+
+    assert status.plug.switch == "on"
+    assert status.plug.power_w == 742.0
+    assert status.plug.energy_kwh == 12.34
+    assert status.ac_estimated_running is True
+    assert status.person.state == "not_home"
+    assert status.person.latitude == 37.473
+    assert status.weather_outdoor is not None
+    assert status.weather_outdoor.temperature == 18.2
+    assert status.indoor is None
+    assert status.updated_at.endswith("+09:00") or "+09:" in status.updated_at
+
+
+def test_ac_off_below_threshold():
+    states = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    states["sensor.hwiya_home_power"]["state"] = "10"
+    status = build_status_from_states(states, ac_power_threshold_w=50)
+    assert status.ac_estimated_running is False
+
+
+def test_unavailable_power_is_null():
+    states = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    states["sensor.hwiya_home_power"]["state"] = "unavailable"
+    status = build_status_from_states(states, ac_power_threshold_w=50)
+    assert status.plug.power_w is None
+    assert status.ac_estimated_running is False
