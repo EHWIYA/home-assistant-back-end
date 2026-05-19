@@ -1,20 +1,21 @@
 # GitHub Actions Secrets (iot-api)
 
-등록 위치: **Repository → Settings → Secrets and variables → Actions → New repository secret**
+**Settings → Secrets and variables → Actions → Repository secrets**
 
-NAS `.env`(HA_TOKEN 등)는 **여기 넣지 않음** — NAS `/home/iwh/iot-api/.env` 에만 둠.
+NAS `.env`는 **NAS `/home/iwh/iot/api/.env`만** (서버 관리). Actions Secret 아님.
 
 ---
 
-## 필수 (deploy-nas job)
+## deploy-nas job (4개)
 
-| Secret 이름 | 설명 | 예시 / 비고 |
-|-------------|------|-------------|
-| `NAS_HOST` | NAS SSH 접속 주소 | `100.88.40.125` (Tailscale). GHA runner가 이 IP로 SSH 가능해야 함 |
-| `NAS_SSH_USER` | SSH 로그인 사용자 | 서버 담당 확인 (예: `iwh`) |
-| `NAS_SSH_KEY` | deploy용 **private key** 전체 | `-----BEGIN OPENSSH PRIVATE KEY-----` … 서버 `authorized_keys`에 public key 등록됨 (`github_actions_deploy` 등) |
+| Secret | 설명 |
+|--------|------|
+| `TS_AUTH_KEY` | Tailscale auth key (Reusable + Ephemeral). **~90일 만료** → 만료 전 재발급·갱신 |
+| `NAS_HOST` | `100.88.40.125` (Tailscale IP). 공인 IP만 쓰면 hosted runner에서 timeout |
+| `NAS_SSH_USER` | `iwh` |
+| `NAS_SSH_KEY` | `github_actions_deploy` **private key** 전체 |
 
-서버 회신에 `NAS_SERVER_USER` / `NAS_SERVER_SSH_KEY` 로 적힌 경우 → **값은 동일**, workflow 에서 쓰는 이름은 위 표기준.
+**순서:** workflow에서 **Tailscale connect → SSH**. `tailscale up` 없이 `100.x:22` SSH 시 timeout.
 
 ---
 
@@ -22,28 +23,23 @@ NAS `.env`(HA_TOKEN 등)는 **여기 넣지 않음** — NAS `/home/iwh/iot-api/
 
 | 이름 | 용도 |
 |------|------|
-| `GITHUB_TOKEN` | `build-and-push` job 이 GHCR login·push (workflow `packages: write`) |
+| `GITHUB_TOKEN` | GHCR build·push (`packages: write`) |
 
 ---
 
-## GHCR 이미지 경로 (참고)
-
-push 성공 후:
+## GHCR (공개)
 
 ```text
-ghcr.io/<GitHub-owner>/<repo-name>:latest
-ghcr.io/<GitHub-owner>/<repo-name>:sha-<commit>
+ghcr.io/ehwiya/home-assistant-back-end:latest
 ```
-
-`<repo-name>` = 이 repository 이름 (예: `home-assistant-back-end`).
-
-패키지 **공개/비공개**는 GitHub Packages 설정 — 비공개면 NAS에서 `docker login ghcr.io` 1회 필요.
 
 ---
 
-## 등록 순서 (권장)
+## HA_BASE_URL (환경별)
 
-1. `main` push → GHCR 이미지 1회 생성 확인  
-2. 서버 NAS 수동 `docker compose up` + `curl /health` 성공  
-3. 위 Secrets 3개 등록  
-4. `workflow_dispatch` 또는 `main` push 로 deploy-nas 재실행
+| 환경 | HA_BASE_URL |
+|------|-------------|
+| 개발 PC (Tailscale) | `http://100.88.40.125:8123` |
+| NAS Docker | `http://host.docker.internal:8123` + compose `extra_hosts` |
+
+로컬 `.env`를 NAS에 그대로 복사하지 않음.

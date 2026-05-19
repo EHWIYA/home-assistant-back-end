@@ -1,5 +1,5 @@
-# NAS: /home/iwh/iot-api/docker-compose.yml
-# HA on host network → use network_mode: host OR HA_BASE_URL=http://192.168.0.19:8123
+# NAS: /home/iwh/iot/api/docker-compose.yml
+# .env: HA_BASE_URL=http://host.docker.internal:8123 (서버에서 관리, 커밋 금지)
 services:
   iot-api:
     image: ghcr.io/ehwiya/home-assistant-back-end:latest
@@ -8,12 +8,5 @@ services:
     env_file: .env
     ports:
       - "127.0.0.1:8002:8002"
-    # Option A (bridge): point HA_BASE_URL at host LAN IP
-    # extra_hosts:
-    #   - "host.docker.internal:host-gateway"
-    # Option B (recommended when HA uses host network):
-    # network_mode: host
-    # environment:
-    #   HOST: 127.0.0.1
-    #   PORT: 8002
-    #   HA_BASE_URL: http://127.0.0.1:8123
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

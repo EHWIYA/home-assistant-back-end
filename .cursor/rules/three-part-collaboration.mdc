@@ -11,7 +11,7 @@ alwaysApply: true
 |------|-------------|----------------|
 | **프론트** | `iot-web` (React/Vite/PWA) | UI, `VITE_API_BASE_URL`, `VITE_API_KEY`, mock 제거·연동 |
 | **백엔드** | **이 repo** (`iot-api`, FastAPI BFF) | HA REST 래핑, `X-API-Key`, API 계약, Docker/GHA 골격 |
-| **서버** | NAS · HA · nginx · GHCR 배포 | HA `:8123`, UFW/Tailscale, `/home/iwh/iot-api/.env`, `iot-api.iwhya.kr` |
+| **서버** | NAS · HA · nginx · GHCR 배포 | HA `:8123`, UFW/Tailscale, `/home/iwh/iot/api/.env`, `iot-api.iwhya.kr` |
 
 **이 워크스페이스 = 백엔드 파트만.** 프론트·서버 설정을 백엔드 repo에 임의로 넣거나 대신 구현하지 않는다.
 

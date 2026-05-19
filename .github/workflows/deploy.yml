@@ -1,21 +1,17 @@
 # =============================================================================
 # iot-api 배포 workflow
 #
-# 트리거
-#   - main push
-#   - workflow_dispatch (수동)
+# 트리거: main push, workflow_dispatch
 #
 # 흐름
-#   1) build-and-push : Docker build → GHCR push
-#   2) deploy-nas     : SSH → NAS /home/iwh/iot-api → compose pull/up
+#   1) build-and-push — Docker build → GHCR push
+#   2) deploy-nas     — Tailscale join → SSH → /home/iwh/iot/api → compose pull/up
 #
-# Secrets (Actions → Repository secrets) — 아래 deploy job 참고
-#   NAS_HOST, NAS_SSH_USER, NAS_SSH_KEY
+# Secrets (deploy-nas)
+#   TS_AUTH_KEY, NAS_HOST, NAS_SSH_USER, NAS_SSH_KEY
 #
-# 자동 제공 (등록 불필요)
-#   GITHUB_TOKEN — GHCR login (packages: write)
-#
-# NAS .env 는 GHA가 덮어쓰지 않음 (이미지만 갱신)
+# 주의: hosted runner는 tailnet 밖 → SSH 전 Tailscale 필수 (없으면 :22 timeout)
+# NAS .env 는 서버 관리 (GHA 미갱신)
 # =============================================================================
 
 name: Build and deploy
@@ -27,9 +23,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # ghcr.io/<owner>/<repo> — github.repository 와 동일
   IMAGE_NAME: ${{ github.repository }}
-  NAS_APP_DIR: /home/iwh/iot-api
+  NAS_APP_DIR: /home/iwh/iot/api
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -71,12 +66,13 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
   # ---------------------------------------------------------------------------
-  # Job 2 — NAS SSH 배포 (main push / 수동 실행 시)
+  # Job 2 — NAS 배포 (Tailscale → SSH)
   #
   # Secrets
-  #   NAS_HOST      — NAS SSH 호스트 (Tailscale IP 권장, 예 100.88.40.125)
-  #   NAS_SSH_USER  — SSH 사용자 (서버 계정)
-  #   NAS_SSH_KEY   — deploy용 private key 전체 (PEM)
+  #   TS_AUTH_KEY   — Reusable + Ephemeral auth key (~90일, 만료 전 갱신)
+  #   NAS_HOST      — 100.88.40.125 (Tailscale IP)
+  #   NAS_SSH_USER  — iwh
+  #   NAS_SSH_KEY   — github_actions_deploy private key
   # ---------------------------------------------------------------------------
   deploy-nas:
     name: NAS docker compose deploy
@@ -85,15 +81,25 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
-      - name: SSH pull and up
+      - name: Tailscale connect
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTH_KEY }}
+
+      - name: SSH pull up and health
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.NAS_HOST }}
           username: ${{ secrets.NAS_SSH_USER }}
           key: ${{ secrets.NAS_SSH_KEY }}
+          timeout: 60s
+          command_timeout: 10m
           script_stop: true
           script: |
             set -e
             cd ${{ env.NAS_APP_DIR }}
             docker compose pull
             docker compose up -d
+            curl -sf http://127.0.0.1:8002/health
+            echo ""
+            echo "health OK"

@@ -53,7 +53,8 @@
 - **로컬 `.env`**: 에이전트 전담 (`.cursor/rules/env.mdc`). `.env.example` 없음.
 - 로컬 HA: 서버 담당이 `HA_BASE_URL`, `HA_TOKEN` 전달 → `.env` 「서버 수신」만 붙여넣기.
 - 공조 템플릿: `.cursor/coordination/REQUEST-server-ha-local.md`
-- NAS `/home/iwh/iot-api/.env`는 서버 전용, GHA가 덮어쓰지 않음.
+- NAS `/home/iwh/iot/api/.env`는 서버 전용, GHA가 덮어쓰지 않음.
+- GHA deploy: `TS_AUTH_KEY` → Tailscale → SSH (`NAS_HOST` 100.88.40.125).
 
 ## Entity (HA)
 
