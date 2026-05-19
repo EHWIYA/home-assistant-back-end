@@ -100,6 +100,20 @@ jobs:
             cd ${{ env.NAS_APP_DIR }}
             docker compose pull
             docker compose up -d
-            curl -sf http://127.0.0.1:8002/health
+            # 컨테이너 기동 직후 curl(56) 방지 — 재시도. NAS .env HOST 는 0.0.0.0 권장
+            ok=0
+            for i in $(seq 1 15); do
+              if curl -sf --connect-timeout 3 --max-time 10 http://127.0.0.1:8002/health; then
+                ok=1
+                break
+              fi
+              sleep 2
+            done
+            if [ "$ok" -ne 1 ]; then
+              echo "health check failed after compose up"
+              docker compose ps
+              docker compose logs --tail 80 iot-api
+              exit 1
+            fi
             echo ""
             echo "health OK"
