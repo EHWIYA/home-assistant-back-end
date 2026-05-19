@@ -31,10 +31,10 @@ curl -H "X-API-Key: YOUR_KEY" http://127.0.0.1:8002/api/v1/status
 
 ## NAS deploy
 
-1. Copy `docker-compose.yml` to `/home/iwh/iot-api/`
-2. Create `.env` on NAS (not in git): `HA_TOKEN`, `IOT_API_KEY`, `CORS_ORIGINS`
+1. Copy `docker-compose.yml` to NAS deploy dir (e.g. `/home/iwh/iot/api/`)
+2. Create `.env` on NAS (not in git): `HA_TOKEN`, `IOT_API_KEY`, `HA_BASE_URL=http://127.0.0.1:8123`, `CORS_ORIGINS`
 3. Set `image:` in compose to your GHCR path
-4. If HA uses `network_mode: host`, either run iot-api with `network_mode: host` and `HA_BASE_URL=http://127.0.0.1:8123`, or use LAN IP `http://192.168.0.19:8123` from bridge network
+4. **HA on host network (운영 확정):** iot-api `network_mode: host` + `HA_BASE_URL=http://127.0.0.1:8123` — bridge + `host.docker.internal` 는 UFW 에서 막힐 수 있음
 
 GitHub Actions (`deploy.yml`) builds to GHCR and SSHs to NAS for `docker compose pull && up -d`.
 
