@@ -1,3 +1,23 @@
+# =============================================================================
+# iot-api 배포 workflow
+#
+# 트리거
+#   - main push
+#   - workflow_dispatch (수동)
+#
+# 흐름
+#   1) build-and-push : Docker build → GHCR push
+#   2) deploy-nas     : SSH → NAS /home/iwh/iot-api → compose pull/up
+#
+# Secrets (Actions → Repository secrets) — 아래 deploy job 참고
+#   NAS_HOST, NAS_SSH_USER, NAS_SSH_KEY
+#
+# 자동 제공 (등록 불필요)
+#   GITHUB_TOKEN — GHCR login (packages: write)
+#
+# NAS .env 는 GHA가 덮어쓰지 않음 (이미지만 갱신)
+# =============================================================================
+
 name: Build and deploy
 
 on:
@@ -7,25 +27,33 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  # ghcr.io/<owner>/<repo> — github.repository 와 동일
   IMAGE_NAME: ${{ github.repository }}
+  NAS_APP_DIR: /home/iwh/iot-api
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1 — GHCR 이미지 빌드·push
+  # ---------------------------------------------------------------------------
   build-and-push:
+    name: GHCR build and push
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Log in to GHCR
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login GHCR
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
+      - name: Image tags
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -42,18 +70,30 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
+  # ---------------------------------------------------------------------------
+  # Job 2 — NAS SSH 배포 (main push / 수동 실행 시)
+  #
+  # Secrets
+  #   NAS_HOST      — NAS SSH 호스트 (Tailscale IP 권장, 예 100.88.40.125)
+  #   NAS_SSH_USER  — SSH 사용자 (서버 계정)
+  #   NAS_SSH_KEY   — deploy용 private key 전체 (PEM)
+  # ---------------------------------------------------------------------------
   deploy-nas:
+    name: NAS docker compose deploy
     needs: build-and-push
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+
     steps:
-      - name: Deploy via SSH
+      - name: SSH pull and up
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.NAS_HOST }}
           username: ${{ secrets.NAS_SSH_USER }}
           key: ${{ secrets.NAS_SSH_KEY }}
+          script_stop: true
           script: |
-            cd /home/iwh/iot-api
+            set -e
+            cd ${{ env.NAS_APP_DIR }}
             docker compose pull
             docker compose up -d
