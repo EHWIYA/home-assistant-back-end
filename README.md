@@ -29,6 +29,21 @@ curl -H "X-API-Key: YOUR_KEY" http://127.0.0.1:8002/api/v1/status
 | POST | `/api/v1/plug` | `X-API-Key` |
 | POST | `/api/v1/ac` | `X-API-Key` |
 | GET | `/api/v1/history/power?hours=24` | `X-API-Key` |
+| GET | `/api/v1/strip/state` | `X-API-Key` (DB + Hejhome 설정 필요) |
+| POST | `/api/v1/strip/channels/{1-4}` body `{"on": true}` | `X-API-Key` |
+| POST | `/api/v1/strip/presets/{name}` | `X-API-Key` |
+
+### Strip (Hejhome PowerStrip2)
+
+- `DATABASE_URL`, `HEJHOME_EMAIL`, `HEJHOME_PASSWORD`, `HEJHOME_STRIP_ID`, `HEJHOME_FAMILY_ID` 필요
+- 컨테이너 기동 시 `alembic upgrade head` 자동 실행 (`scripts/docker-entrypoint.sh`)
+- NAS PostgreSQL: `127.0.0.1:5433/iot_db` (서버 담당 compose)
+
+```bash
+curl -H "X-API-Key: YOUR_KEY" http://127.0.0.1:8002/api/v1/strip/state
+curl -X POST -H "X-API-Key: YOUR_KEY" -H "Content-Type: application/json" \
+  -d '{"on":true}' http://127.0.0.1:8002/api/v1/strip/channels/1
+```
 
 ## NAS deploy
 
