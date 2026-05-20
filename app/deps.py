@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings, get_settings
 from app.db.session import get_db_session
 from app.exceptions import StripNotConfiguredError, UnauthorizedError
+from app.services.schedule_service import ScheduleService
 from app.services.strip_service import StripService
 
 
@@ -34,3 +35,15 @@ def get_strip_service(
 
 
 StripServiceDep = Annotated[StripService, Depends(get_strip_service)]
+
+
+def get_schedule_service(
+    settings: SettingsDep,
+    session: DbSessionDep,
+) -> ScheduleService:
+    if not settings.strip_configured:
+        raise StripNotConfiguredError()
+    return ScheduleService(settings, session)
+
+
+ScheduleServiceDep = Annotated[ScheduleService, Depends(get_schedule_service)]

@@ -43,3 +43,22 @@ class StripNotConfiguredError(HTTPException):
                 "code": "strip_not_configured",
             },
         )
+
+
+class ScheduleNotFoundError(HTTPException):
+    def __init__(self, schedule_id: str) -> None:
+        super().__init__(
+            status_code=404,
+            detail={
+                "detail": f"Schedule not found: {schedule_id}",
+                "code": "schedule_not_found",
+            },
+        )
+
+
+class ScheduleValidationError(HTTPException):
+    def __init__(self, detail: str) -> None:
+        super().__init__(
+            status_code=400,
+            detail={"detail": detail, "code": "schedule_invalid"},
+        )

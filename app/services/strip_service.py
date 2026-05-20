@@ -122,7 +122,7 @@ class StripService:
 
         return await self.get_state()
 
-    async def apply_preset(self, name: str) -> dict:
+    async def apply_preset(self, name: str, *, source: str | None = None) -> dict:
         result = await self._session.execute(select(StripPreset).where(StripPreset.name == name))
         preset = result.scalar_one_or_none()
         if preset is None:
@@ -144,7 +144,7 @@ class StripService:
             device_id=device.id,
             channel_number=None,
             action="preset",
-            source=f"preset:{name}",
+            source=source or f"preset:{name}",
             success=False,
         )
         self._session.add(audit)

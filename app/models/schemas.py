@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class HealthResponse(BaseModel):
@@ -87,3 +87,81 @@ class StripChannelActionRequest(BaseModel):
 class StripPresetApplyResponse(BaseModel):
     ok: bool = True
     state: StripStateResponse
+
+
+ScheduleActionType = Literal["channel", "preset"]
+
+
+class ScheduleCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    enabled: bool = True
+    action_type: ScheduleActionType
+    channel_number: int | None = Field(default=None, ge=1, le=4)
+    channel_on: bool | None = None
+    preset_name: str | None = Field(default=None, max_length=64)
+    time_kst: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    days_of_week: list[int] = Field(default_factory=lambda: list(range(7)))
+
+    @field_validator("days_of_week")
+    @classmethod
+    def validate_days(cls, value: list[int]) -> list[int]:
+        if not value:
+            raise ValueError("days_of_week must not be empty")
+        for day in value:
+            if day < 0 or day > 6:
+                raise ValueError("days_of_week must be 0-6 (Mon-Sun)")
+        return sorted(set(value))
+
+
+class ScheduleUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    enabled: bool | None = None
+    action_type: ScheduleActionType | None = None
+    channel_number: int | None = Field(default=None, ge=1, le=4)
+    channel_on: bool | None = None
+    preset_name: str | None = Field(default=None, max_length=64)
+    time_kst: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    days_of_week: list[int] | None = None
+
+    @field_validator("days_of_week")
+    @classmethod
+    def validate_days(cls, value: list[int] | None) -> list[int] | None:
+        if value is None:
+            return value
+        if not value:
+            raise ValueError("days_of_week must not be empty")
+        for day in value:
+            if day < 0 or day > 6:
+                raise ValueError("days_of_week must be 0-6 (Mon-Sun)")
+        return sorted(set(value))
+
+
+class ScheduleResponse(BaseModel):
+    id: str
+    name: str
+    enabled: bool
+    action_type: ScheduleActionType
+    channel_number: int | None = None
+    channel_on: bool | None = None
+    preset_name: str | None = None
+    time_kst: str
+    days_of_week: list[int]
+    created_at: str
+    updated_at: str
+
+
+class ScheduleListResponse(BaseModel):
+    schedules: list[ScheduleResponse]
+
+
+class ScheduleRunResponse(BaseModel):
+    id: str
+    schedule_id: str
+    scheduled_at: str
+    status: Literal["pending", "success", "failed"]
+    detail: str | None = None
+    created_at: str
+
+
+class ScheduleRunListResponse(BaseModel):
+    runs: list[ScheduleRunResponse]
