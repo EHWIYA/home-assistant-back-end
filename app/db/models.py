@@ -64,3 +64,42 @@ class StripPreset(Base):
     name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     channels: Mapped[dict] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Schedule(Base):
+    __tablename__ = "schedules"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    device_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("devices.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    action_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    channel_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    channel_on: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    preset_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    time_kst: Mapped[str] = mapped_column(String(5), nullable=False)
+    days_of_week: Mapped[list] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    runs: Mapped[list[ScheduleRun]] = relationship(back_populates="schedule", cascade="all, delete-orphan")
+
+
+class ScheduleRun(Base):
+    __tablename__ = "schedule_runs"
+    __table_args__ = (
+        UniqueConstraint("schedule_id", "scheduled_at", name="uq_schedule_runs_schedule_slot"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    schedule_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("schedules.id", ondelete="CASCADE"), nullable=False)
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    schedule: Mapped[Schedule] = relationship(back_populates="runs")
