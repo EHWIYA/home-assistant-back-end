@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
     ha_reachable: bool
+    db_reachable: bool | None = None
 
 
 class PlugStatus(BaseModel):
@@ -64,3 +65,25 @@ class PowerHistoryResponse(BaseModel):
 class ErrorBody(BaseModel):
     detail: str
     code: str
+
+
+class StripChannelState(BaseModel):
+    channel: int = Field(ge=1, le=4)
+    on: bool | None = None
+    label: str | None = None
+
+
+class StripStateResponse(BaseModel):
+    device_id: str
+    online: bool | None = None
+    channels: list[StripChannelState]
+    updated_at: str
+
+
+class StripChannelActionRequest(BaseModel):
+    on: bool
+
+
+class StripPresetApplyResponse(BaseModel):
+    ok: bool = True
+    state: StripStateResponse
