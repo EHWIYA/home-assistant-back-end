@@ -46,13 +46,51 @@ Base: `https://iot-api.iwhya.kr` (로컬 `http://127.0.0.1:8002`)
 
 `{ "detail": "...", "code": "..." }` — `strip_not_configured` (503), `hejhome_*`, `unauthorized` (401)
 
-## Phase 2 (예정)
+## Schedules (Phase 2)
 
-- `schedules`, `schedule_runs` CRUD
-- KST 워커 CLI → NAS `iot-scheduler.timer`
+인증: `X-API-Key`. `days_of_week`: **0=월 … 6=일** (Python `weekday()`). 시간은 **KST `HH:MM`**.
 
-## 스케줄 워커 선호안 (백엔드 제안)
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/api/v1/schedules` | 목록 |
+| POST | `/api/v1/schedules` | 생성 (201) |
+| GET | `/api/v1/schedules/{id}` | 단건 |
+| PATCH | `/api/v1/schedules/{id}` | 수정 |
+| DELETE | `/api/v1/schedules/{id}` | 삭제 (204) |
+| GET | `/api/v1/schedules/{id}/runs?limit=50` | 실행 이력 |
 
-**`docker exec iot-api python -m app.cli.scheduler`** (1회 due 실행) + systemd timer.
+### POST body 예 (채널 ON)
 
-이유: 이미지·`.env`·DB·Hejhome 자격증명을 iot-api와 공유, 별도 컨테이너 불필요.
+```json
+{
+  "name": "아침 콘센트",
+  "enabled": true,
+  "action_type": "channel",
+  "channel_number": 1,
+  "channel_on": true,
+  "time_kst": "08:00",
+  "days_of_week": [0, 1, 2, 3, 4]
+}
+```
+
+### POST body 예 (프리셋)
+
+```json
+{
+  "name": "취침 모드",
+  "action_type": "preset",
+  "preset_name": "sleep",
+  "time_kst": "23:30",
+  "days_of_week": [0, 1, 2, 3, 4, 5, 6]
+}
+```
+
+## 스케줄 워커 (NAS systemd)
+
+1분마다 1회 due 실행:
+
+```bash
+docker exec iot-api python -m app.cli.scheduler
+```
+
+stdout JSON: `executed`, `skipped_duplicate`, `results[]`.

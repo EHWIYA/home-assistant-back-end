@@ -32,6 +32,7 @@ curl -H "X-API-Key: YOUR_KEY" http://127.0.0.1:8002/api/v1/status
 | GET | `/api/v1/strip/state` | `X-API-Key` (DB + Hejhome 설정 필요) |
 | POST | `/api/v1/strip/channels/{1-4}` body `{"on": true}` | `X-API-Key` |
 | POST | `/api/v1/strip/presets/{name}` | `X-API-Key` |
+| GET/POST/PATCH/DELETE | `/api/v1/schedules` … | `X-API-Key` (DB + Hejhome) |
 
 ### Strip (Hejhome PowerStrip2)
 
@@ -44,6 +45,14 @@ curl -H "X-API-Key: YOUR_KEY" http://127.0.0.1:8002/api/v1/strip/state
 curl -X POST -H "X-API-Key: YOUR_KEY" -H "Content-Type: application/json" \
   -d '{"on":true}' http://127.0.0.1:8002/api/v1/strip/channels/1
 ```
+
+### Schedules (KST)
+
+```bash
+docker exec iot-api python -m app.cli.scheduler
+```
+
+상세: `.cursor/coordination/STRIP_API_v1.md`
 
 ## NAS deploy
 
