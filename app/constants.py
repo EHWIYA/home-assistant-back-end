@@ -17,3 +17,10 @@ STATUS_ENTITY_IDS = (
     ENTITY_PERSON,
     ENTITY_WEATHER,
 )
+
+# Hejhome OAuth (square.hej.so shop client — same as official app / homebridge-hejhome)
+HEJHOME_CLIENT_ID = "62f4020744ca4510827d3b4a4d2c7e7f"
+HEJHOME_CLIENT_SECRET = "fcd4302cece447a9ab009296f649d2c0"
+HEJHOME_OAUTH_REDIRECT_URI = "https://square.hej.so/list"
+HEJHOME_DEVICE_TYPE_STRIP = "PowerStrip2"
+STRIP_CHANNEL_POWER_KEYS = ("power1", "power2", "power3", "power4")
