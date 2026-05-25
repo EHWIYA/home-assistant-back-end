@@ -6,6 +6,8 @@ from zoneinfo import ZoneInfo
 
 from app.config import Settings
 from app.constants import (
+    ENTITY_INDOOR_HUMIDITY,
+    ENTITY_INDOOR_TEMP,
     ENTITY_PERSON,
     ENTITY_PLUG_ENERGY,
     ENTITY_PLUG_POWER,
@@ -14,6 +16,7 @@ from app.constants import (
     STATUS_ENTITY_IDS,
 )
 from app.models.schemas import (
+    IndoorClimate,
     PersonStatus,
     PlugStatus,
     StatusResponse,
@@ -49,6 +52,42 @@ def _switch_state(state: str | None) -> SwitchState:
     if state == "unavailable":
         return "unavailable"
     return "unknown"
+
+
+def _entity_state_unusable(state: str | None) -> bool:
+    if state is None:
+        return True
+    return str(state).strip().lower() in ("unavailable", "unknown", "none", "")
+
+
+def _fahrenheit_to_celsius(fahrenheit: float) -> float:
+    return round((fahrenheit - 32) * 5 / 9, 1)
+
+
+def _temperature_celsius(raw: dict[str, Any]) -> float | None:
+    value = _parse_float(raw.get("state"))
+    if value is None:
+        return None
+    unit = str((raw.get("attributes") or {}).get("unit_of_measurement", "")).strip().upper()
+    if unit in ("°C", "C"):
+        return round(value, 1)
+    return _fahrenheit_to_celsius(value)
+
+
+def _build_indoor(states: dict[str, dict[str, Any]]) -> IndoorClimate | None:
+    temp_raw = states.get(ENTITY_INDOOR_TEMP)
+    humidity_raw = states.get(ENTITY_INDOOR_HUMIDITY)
+    if not temp_raw or not humidity_raw:
+        return None
+    if _entity_state_unusable(temp_raw.get("state")) or _entity_state_unusable(
+        humidity_raw.get("state")
+    ):
+        return None
+    temperature = _temperature_celsius(temp_raw)
+    humidity = _parse_float(humidity_raw.get("state"))
+    if temperature is None or humidity is None:
+        return None
+    return IndoorClimate(temperature=temperature, humidity=humidity)
 
 
 def build_status_from_states(
@@ -88,7 +127,7 @@ def build_status_from_states(
         plug=PlugStatus(switch=switch, power_w=power_w, energy_kwh=energy_kwh),
         ac_estimated_running=ac_running,
         person=person,
-        indoor=None,
+        indoor=_build_indoor(states),
         weather_outdoor=weather,
         updated_at=_now_kst_iso(),
     )

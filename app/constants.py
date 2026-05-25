@@ -3,6 +3,8 @@
 ENTITY_PLUG_SWITCH = "switch.hwiya_home"
 ENTITY_PLUG_POWER = "sensor.hwiya_home_power"
 ENTITY_PLUG_ENERGY = "sensor.hwiya_home_energy"
+ENTITY_INDOOR_TEMP = "sensor.hwiya_sensor_temperature"
+ENTITY_INDOOR_HUMIDITY = "sensor.hwiya_sensor_humidity"
 ENTITY_PERSON = "person.hwiya_ha"
 ENTITY_WEATHER = "weather.forecast_jib"
 ENTITY_AC_REMOTE = "remote.hwiya_sensor"
@@ -14,6 +16,8 @@ STATUS_ENTITY_IDS = (
     ENTITY_PLUG_SWITCH,
     ENTITY_PLUG_POWER,
     ENTITY_PLUG_ENERGY,
+    ENTITY_INDOOR_TEMP,
+    ENTITY_INDOOR_HUMIDITY,
     ENTITY_PERSON,
     ENTITY_WEATHER,
 )

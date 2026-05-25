@@ -35,3 +35,56 @@ def test_unavailable_power_is_null():
     status = build_status_from_states(states, ac_power_threshold_w=50)
     assert status.plug.power_w is None
     assert status.ac_estimated_running is False
+
+
+def _states_with_indoor(
+    temp_state: str = "81",
+    humidity_state: str = "49",
+    *,
+    temp_unit: str = "°F",
+) -> dict:
+    states = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    states["sensor.hwiya_sensor_temperature"] = {
+        "entity_id": "sensor.hwiya_sensor_temperature",
+        "state": temp_state,
+        "attributes": {"unit_of_measurement": temp_unit},
+    }
+    states["sensor.hwiya_sensor_humidity"] = {
+        "entity_id": "sensor.hwiya_sensor_humidity",
+        "state": humidity_state,
+        "attributes": {"unit_of_measurement": "%"},
+    }
+    return states
+
+
+def test_indoor_fahrenheit_to_celsius():
+    status = build_status_from_states(_states_with_indoor(), ac_power_threshold_w=50)
+    assert status.indoor is not None
+    assert status.indoor.temperature == 27.2
+    assert status.indoor.humidity == 49.0
+
+
+def test_indoor_celsius_passthrough():
+    states = _states_with_indoor(temp_state="27.5", temp_unit="°C")
+    status = build_status_from_states(states, ac_power_threshold_w=50)
+    assert status.indoor is not None
+    assert status.indoor.temperature == 27.5
+    assert status.indoor.humidity == 49.0
+
+
+def test_indoor_null_when_sensor_missing():
+    states = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    status = build_status_from_states(states, ac_power_threshold_w=50)
+    assert status.indoor is None
+
+
+def test_indoor_null_when_unavailable():
+    states = _states_with_indoor(temp_state="unavailable")
+    status = build_status_from_states(states, ac_power_threshold_w=50)
+    assert status.indoor is None
+
+
+def test_indoor_null_when_humidity_unknown():
+    states = _states_with_indoor(humidity_state="unknown")
+    status = build_status_from_states(states, ac_power_threshold_w=50)
+    assert status.indoor is None

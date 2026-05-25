@@ -27,11 +27,16 @@ class WeatherOutdoor(BaseModel):
     condition: str | None = None
 
 
+class IndoorClimate(BaseModel):
+    temperature: float
+    humidity: float
+
+
 class StatusResponse(BaseModel):
     plug: PlugStatus
     ac_estimated_running: bool
     person: PersonStatus
-    indoor: None = None
+    indoor: IndoorClimate | None = None
     weather_outdoor: WeatherOutdoor | None = None
     updated_at: str
 
