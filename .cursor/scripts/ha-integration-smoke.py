@@ -19,10 +19,14 @@ async def main() -> int:
     print(f"ha_reachable={reachable}")
     if not reachable:
         return 1
-    states = []
+    by_id: dict[str, dict] = {}
     for eid in STATUS_ENTITY_IDS:
-        states.append(await ha.get_state(eid))
-    dto = build_status_from_states(states, settings.ac_power_threshold_w)
+        by_id[eid] = await ha.get_state(eid)
+    dto = build_status_from_states(
+        by_id,
+        ac_power_threshold_w=settings.ac_power_threshold_w,
+        pc_power_threshold_w=settings.pc_power_threshold_w,
+    )
     print(json.dumps(dto.model_dump(), ensure_ascii=False, indent=2))
     return 0
 

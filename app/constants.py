@@ -3,6 +3,14 @@
 ENTITY_PLUG_SWITCH = "switch.hwiya_home"
 ENTITY_PLUG_POWER = "sensor.hwiya_home_power"
 ENTITY_PLUG_ENERGY = "sensor.hwiya_home_energy"
+
+ENTITY_PC_SWITCH = "switch.hwiya_pc"
+ENTITY_PC_POWER = "sensor.hwiya_pc_current_consumption"
+ENTITY_PC_ENERGY_TODAY = "sensor.hwiya_pc_today_s_consumption"
+ENTITY_PC_ENERGY_MONTH = "sensor.hwiya_pc_this_month_s_consumption"
+ENTITY_PC_CLOUD = "binary_sensor.hwiya_pc_cloud_connection"
+ENTITY_PC_SIGNAL = "sensor.hwiya_pc_signal_level"
+ENTITY_PC_OVERLOAD = "binary_sensor.hwiya_pc_overloaded"
 ENTITY_INDOOR_TEMP = "sensor.hwiya_sensor_temperature"
 ENTITY_INDOOR_HUMIDITY = "sensor.hwiya_sensor_humidity"
 ENTITY_PERSON = "person.hwiya_ha"
@@ -16,6 +24,13 @@ STATUS_ENTITY_IDS = (
     ENTITY_PLUG_SWITCH,
     ENTITY_PLUG_POWER,
     ENTITY_PLUG_ENERGY,
+    ENTITY_PC_SWITCH,
+    ENTITY_PC_POWER,
+    ENTITY_PC_ENERGY_TODAY,
+    ENTITY_PC_ENERGY_MONTH,
+    ENTITY_PC_CLOUD,
+    ENTITY_PC_SIGNAL,
+    ENTITY_PC_OVERLOAD,
     ENTITY_INDOOR_TEMP,
     ENTITY_INDOOR_HUMIDITY,
     ENTITY_PERSON,

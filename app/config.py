@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     ha_token: str = Field(default="", alias="HA_TOKEN")
     iot_api_key: str = Field(default="", alias="IOT_API_KEY")
     ac_power_threshold_w: float = Field(default=50.0, alias="AC_POWER_THRESHOLD_W")
+    pc_power_threshold_w: float = Field(default=50.0, alias="PC_POWER_THRESHOLD_W")
     cors_origins: str = Field(
         default="https://iot.iwhya.kr",
         alias="CORS_ORIGINS",

@@ -8,6 +8,13 @@ from app.config import Settings
 from app.constants import (
     ENTITY_INDOOR_HUMIDITY,
     ENTITY_INDOOR_TEMP,
+    ENTITY_PC_CLOUD,
+    ENTITY_PC_ENERGY_MONTH,
+    ENTITY_PC_ENERGY_TODAY,
+    ENTITY_PC_OVERLOAD,
+    ENTITY_PC_POWER,
+    ENTITY_PC_SIGNAL,
+    ENTITY_PC_SWITCH,
     ENTITY_PERSON,
     ENTITY_PLUG_ENERGY,
     ENTITY_PLUG_POWER,
@@ -17,6 +24,7 @@ from app.constants import (
 )
 from app.models.schemas import (
     IndoorClimate,
+    PcStatus,
     PersonStatus,
     PlugStatus,
     StatusResponse,
@@ -52,6 +60,17 @@ def _switch_state(state: str | None) -> SwitchState:
     if state == "unavailable":
         return "unavailable"
     return "unknown"
+
+
+def _binary_is_on(state: str | None) -> bool:
+    return str(state or "").strip().lower() == "on"
+
+
+def _parse_int(value: Any) -> int | None:
+    parsed = _parse_float(value)
+    if parsed is None:
+        return None
+    return int(round(parsed))
 
 
 def _entity_state_unusable(state: str | None) -> bool:
@@ -90,10 +109,38 @@ def _build_indoor(states: dict[str, dict[str, Any]]) -> IndoorClimate | None:
     return IndoorClimate(temperature=temperature, humidity=humidity)
 
 
+def _build_pc(states: dict[str, dict[str, Any]], *, pc_power_threshold_w: float) -> PcStatus:
+    switch_raw = states.get(ENTITY_PC_SWITCH, {})
+    power_raw = states.get(ENTITY_PC_POWER, {})
+    energy_today_raw = states.get(ENTITY_PC_ENERGY_TODAY, {})
+    energy_month_raw = states.get(ENTITY_PC_ENERGY_MONTH, {})
+    cloud_raw = states.get(ENTITY_PC_CLOUD, {})
+    signal_raw = states.get(ENTITY_PC_SIGNAL, {})
+    overload_raw = states.get(ENTITY_PC_OVERLOAD, {})
+
+    switch = _switch_state(switch_raw.get("state"))
+    power_w = _parse_float(power_raw.get("state"))
+    energy_today_kwh = _parse_float(energy_today_raw.get("state"))
+    energy_month_kwh = _parse_float(energy_month_raw.get("state"))
+    estimated_running = power_w is not None and power_w >= pc_power_threshold_w
+
+    return PcStatus(
+        switch=switch,
+        power_w=power_w,
+        energy_today_kwh=energy_today_kwh,
+        energy_month_kwh=energy_month_kwh,
+        online=_binary_is_on(cloud_raw.get("state")),
+        wifi_signal_level=_parse_int(signal_raw.get("state")),
+        overload=_binary_is_on(overload_raw.get("state")),
+        estimated_running=estimated_running,
+    )
+
+
 def build_status_from_states(
     states: dict[str, dict[str, Any]],
     *,
     ac_power_threshold_w: float,
+    pc_power_threshold_w: float,
 ) -> StatusResponse:
     plug_switch_raw = states.get(ENTITY_PLUG_SWITCH, {})
     plug_power_raw = states.get(ENTITY_PLUG_POWER, {})
@@ -125,6 +172,7 @@ def build_status_from_states(
 
     return StatusResponse(
         plug=PlugStatus(switch=switch, power_w=power_w, energy_kwh=energy_kwh),
+        pc=_build_pc(states, pc_power_threshold_w=pc_power_threshold_w),
         ac_estimated_running=ac_running,
         person=person,
         indoor=_build_indoor(states),
@@ -138,4 +186,5 @@ async def fetch_and_build_status(ha: HAClient, settings: Settings) -> StatusResp
     return build_status_from_states(
         states,
         ac_power_threshold_w=settings.ac_power_threshold_w,
+        pc_power_threshold_w=settings.pc_power_threshold_w,
     )

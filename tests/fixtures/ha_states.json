@@ -14,6 +14,41 @@
     "state": "12.34",
     "attributes": { "unit_of_measurement": "kWh" }
   },
+  "switch.hwiya_pc": {
+    "entity_id": "switch.hwiya_pc",
+    "state": "on",
+    "attributes": {}
+  },
+  "sensor.hwiya_pc_current_consumption": {
+    "entity_id": "sensor.hwiya_pc_current_consumption",
+    "state": "85.5",
+    "attributes": { "unit_of_measurement": "W" }
+  },
+  "sensor.hwiya_pc_today_s_consumption": {
+    "entity_id": "sensor.hwiya_pc_today_s_consumption",
+    "state": "0.42",
+    "attributes": { "unit_of_measurement": "kWh" }
+  },
+  "sensor.hwiya_pc_this_month_s_consumption": {
+    "entity_id": "sensor.hwiya_pc_this_month_s_consumption",
+    "state": "3.15",
+    "attributes": { "unit_of_measurement": "kWh" }
+  },
+  "binary_sensor.hwiya_pc_cloud_connection": {
+    "entity_id": "binary_sensor.hwiya_pc_cloud_connection",
+    "state": "on",
+    "attributes": {}
+  },
+  "sensor.hwiya_pc_signal_level": {
+    "entity_id": "sensor.hwiya_pc_signal_level",
+    "state": "3",
+    "attributes": {}
+  },
+  "binary_sensor.hwiya_pc_overloaded": {
+    "entity_id": "binary_sensor.hwiya_pc_overloaded",
+    "state": "off",
+    "attributes": {}
+  },
   "person.hwiya_ha": {
     "entity_id": "person.hwiya_ha",
     "state": "not_home",

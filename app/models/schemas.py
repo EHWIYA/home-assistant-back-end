@@ -15,6 +15,17 @@ class PlugStatus(BaseModel):
     energy_kwh: float | None = None
 
 
+class PcStatus(BaseModel):
+    switch: Literal["on", "off", "unavailable", "unknown"]
+    power_w: float | None = None
+    energy_today_kwh: float | None = None
+    energy_month_kwh: float | None = None
+    online: bool
+    wifi_signal_level: int | None = None
+    overload: bool
+    estimated_running: bool
+
+
 class PersonStatus(BaseModel):
     state: str
     latitude: float | None = None
@@ -34,6 +45,7 @@ class IndoorClimate(BaseModel):
 
 class StatusResponse(BaseModel):
     plug: PlugStatus
+    pc: PcStatus
     ac_estimated_running: bool
     person: PersonStatus
     indoor: IndoorClimate | None = None
@@ -46,6 +58,15 @@ class PlugActionRequest(BaseModel):
 
 
 class PlugActionResponse(BaseModel):
+    ok: bool = True
+    switch: Literal["on", "off", "unavailable", "unknown"]
+
+
+class PcActionRequest(BaseModel):
+    action: Literal["on", "off"]
+
+
+class PcActionResponse(BaseModel):
     ok: bool = True
     switch: Literal["on", "off", "unavailable", "unknown"]
 
