@@ -28,6 +28,12 @@ def test_build_status_from_fixture():
     assert status.person.latitude == 37.473
     assert status.weather_outdoor is not None
     assert status.weather_outdoor.temperature == 18.2
+    assert status.ac_auto_enabled is True
+    assert status.ac_auto_state is not None
+    assert status.ac_auto_state.state == "on"
+    assert status.ac_auto_state.last_on == "2026-05-26 10:10:00"
+    assert status.ac_auto_state.last_off == "2026-05-26 09:30:00"
+    assert status.ac_auto_state.last_transition == "2026-05-26 10:10:00"
     assert status.indoor is None
     assert status.updated_at.endswith("+09:00") or "+09:" in status.updated_at
 

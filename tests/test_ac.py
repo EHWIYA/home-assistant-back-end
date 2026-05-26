@@ -1,9 +1,16 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
 from app.config import Settings, get_settings
-from app.constants import AC_COMMAND_OFF, AC_COMMAND_ON, AC_REMOTE_DEVICE, ENTITY_AC_REMOTE
+from app.constants import (
+    AC_COMMAND_OFF,
+    AC_COMMAND_ON,
+    AC_REMOTE_DEVICE,
+    ENTITY_AC_LAST_OFF,
+    ENTITY_AC_LAST_ON,
+    ENTITY_AC_REMOTE,
+)
 from app.deps import verify_api_key
 from app.main import create_app
 
@@ -41,7 +48,10 @@ def test_ac_on_calls_remote_send_command():
         )
     assert resp.status_code == 200
     assert resp.json() == {"ok": True}
-    mock_cls.return_value.call_service.assert_awaited_once_with(
+    assert mock_cls.return_value.call_service.await_count == 2
+    first = mock_cls.return_value.call_service.await_args_list[0]
+    second = mock_cls.return_value.call_service.await_args_list[1]
+    assert first.args == (
         "remote",
         "send_command",
         {
@@ -50,6 +60,13 @@ def test_ac_on_calls_remote_send_command():
             "command": AC_COMMAND_ON,
         },
     )
+    assert second.args == (
+        "input_datetime",
+        "set_datetime",
+        {"entity_id": ENTITY_AC_LAST_ON, "datetime": ANY},
+    )
+    assert isinstance(second.args[2]["datetime"], str)
+    assert len(second.args[2]["datetime"]) == 19
 
 
 def test_ac_off_calls_remote_send_command():
@@ -63,7 +80,10 @@ def test_ac_off_calls_remote_send_command():
             headers={"X-API-Key": "test-key"},
         )
     assert resp.status_code == 200
-    mock_cls.return_value.call_service.assert_awaited_once_with(
+    assert mock_cls.return_value.call_service.await_count == 2
+    first = mock_cls.return_value.call_service.await_args_list[0]
+    second = mock_cls.return_value.call_service.await_args_list[1]
+    assert first.args == (
         "remote",
         "send_command",
         {
@@ -72,3 +92,10 @@ def test_ac_off_calls_remote_send_command():
             "command": AC_COMMAND_OFF,
         },
     )
+    assert second.args == (
+        "input_datetime",
+        "set_datetime",
+        {"entity_id": ENTITY_AC_LAST_OFF, "datetime": ANY},
+    )
+    assert isinstance(second.args[2]["datetime"], str)
+    assert len(second.args[2]["datetime"]) == 19

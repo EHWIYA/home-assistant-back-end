@@ -8,6 +8,8 @@ from app.config import Settings
 from app.constants import (
     ENTITY_INDOOR_HUMIDITY,
     ENTITY_INDOOR_TEMP,
+    ENTITY_AC_AUTO_ENABLED,
+    ENTITY_AC_AUTO_STATE,
     ENTITY_PC_CLOUD,
     ENTITY_PC_ENERGY_MONTH,
     ENTITY_PC_ENERGY_TODAY,
@@ -23,6 +25,7 @@ from app.constants import (
     STATUS_ENTITY_IDS,
 )
 from app.models.schemas import (
+    AcAutoState,
     IndoorClimate,
     PcStatus,
     PersonStatus,
@@ -136,6 +139,34 @@ def _build_pc(states: dict[str, dict[str, Any]], *, pc_power_threshold_w: float)
     )
 
 
+def _build_ac_auto_enabled(states: dict[str, dict[str, Any]]) -> bool | None:
+    raw = states.get(ENTITY_AC_AUTO_ENABLED)
+    if not raw:
+        return None
+    state = str(raw.get("state") or "").strip().lower()
+    if state == "on":
+        return True
+    if state == "off":
+        return False
+    return None
+
+
+def _build_ac_auto_state(states: dict[str, dict[str, Any]]) -> AcAutoState | None:
+    raw = states.get(ENTITY_AC_AUTO_STATE)
+    if not raw:
+        return None
+    state = str(raw.get("state") or "").strip().lower()
+    if state not in ("on", "off", "unknown", "unavailable"):
+        state = "unknown"
+    attrs = raw.get("attributes") or {}
+    return AcAutoState(
+        state=state,  # type: ignore[arg-type]
+        last_on=attrs.get("last_on"),
+        last_off=attrs.get("last_off"),
+        last_transition=attrs.get("last_transition"),
+    )
+
+
 def build_status_from_states(
     states: dict[str, dict[str, Any]],
     *,
@@ -174,6 +205,8 @@ def build_status_from_states(
         plug=PlugStatus(switch=switch, power_w=power_w, energy_kwh=energy_kwh),
         pc=_build_pc(states, pc_power_threshold_w=pc_power_threshold_w),
         ac_estimated_running=ac_running,
+        ac_auto_enabled=_build_ac_auto_enabled(states),
+        ac_auto_state=_build_ac_auto_state(states),
         person=person,
         indoor=_build_indoor(states),
         weather_outdoor=weather,

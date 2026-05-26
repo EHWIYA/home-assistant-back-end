@@ -65,5 +65,19 @@
       "humidity": 55,
       "condition": "cloudy"
     }
+  },
+  "input_boolean.hwiya_ac_auto_enabled": {
+    "entity_id": "input_boolean.hwiya_ac_auto_enabled",
+    "state": "on",
+    "attributes": {}
+  },
+  "sensor.hwiya_ac_auto_state": {
+    "entity_id": "sensor.hwiya_ac_auto_state",
+    "state": "on",
+    "attributes": {
+      "last_on": "2026-05-26 10:10:00",
+      "last_off": "2026-05-26 09:30:00",
+      "last_transition": "2026-05-26 10:10:00"
+    }
   }
 }

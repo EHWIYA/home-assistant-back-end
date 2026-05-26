@@ -43,10 +43,19 @@ class IndoorClimate(BaseModel):
     humidity: float
 
 
+class AcAutoState(BaseModel):
+    state: Literal["on", "off", "unknown", "unavailable"] = "unknown"
+    last_on: str | None = None
+    last_off: str | None = None
+    last_transition: str | None = None
+
+
 class StatusResponse(BaseModel):
     plug: PlugStatus
     pc: PcStatus
     ac_estimated_running: bool
+    ac_auto_enabled: bool | None = None
+    ac_auto_state: AcAutoState | None = None
     person: PersonStatus
     indoor: IndoorClimate | None = None
     weather_outdoor: WeatherOutdoor | None = None
