@@ -26,6 +26,7 @@ from app.constants import (
 )
 from app.models.schemas import (
     AcAutoState,
+    ElectricityInfo,
     IndoorClimate,
     PcStatus,
     PersonStatus,
@@ -76,6 +77,12 @@ def _parse_int(value: Any) -> int | None:
     return int(round(parsed))
 
 
+def _estimate_cost_won(kwh: float | None, rate_won_per_kwh: float) -> int | None:
+    if kwh is None:
+        return None
+    return int(round(kwh * rate_won_per_kwh, 0))
+
+
 def _entity_state_unusable(state: str | None) -> bool:
     if state is None:
         return True
@@ -112,7 +119,12 @@ def _build_indoor(states: dict[str, dict[str, Any]]) -> IndoorClimate | None:
     return IndoorClimate(temperature=temperature, humidity=humidity)
 
 
-def _build_pc(states: dict[str, dict[str, Any]], *, pc_power_threshold_w: float) -> PcStatus:
+def _build_pc(
+    states: dict[str, dict[str, Any]],
+    *,
+    pc_power_threshold_w: float,
+    estimate_rate_won_per_kwh: float,
+) -> PcStatus:
     switch_raw = states.get(ENTITY_PC_SWITCH, {})
     power_raw = states.get(ENTITY_PC_POWER, {})
     energy_today_raw = states.get(ENTITY_PC_ENERGY_TODAY, {})
@@ -132,6 +144,8 @@ def _build_pc(states: dict[str, dict[str, Any]], *, pc_power_threshold_w: float)
         power_w=power_w,
         energy_today_kwh=energy_today_kwh,
         energy_month_kwh=energy_month_kwh,
+        estimated_cost_today_won=_estimate_cost_won(energy_today_kwh, estimate_rate_won_per_kwh),
+        estimated_cost_month_won=_estimate_cost_won(energy_month_kwh, estimate_rate_won_per_kwh),
         online=_binary_is_on(cloud_raw.get("state")),
         wifi_signal_level=_parse_int(signal_raw.get("state")),
         overload=_binary_is_on(overload_raw.get("state")),
@@ -181,6 +195,7 @@ def build_status_from_states(
     *,
     ac_power_threshold_w: float,
     pc_power_threshold_w: float,
+    estimate_rate_won_per_kwh: float,
 ) -> StatusResponse:
     plug_switch_raw = states.get(ENTITY_PLUG_SWITCH, {})
     plug_power_raw = states.get(ENTITY_PLUG_POWER, {})
@@ -211,8 +226,18 @@ def build_status_from_states(
         )
 
     return StatusResponse(
-        plug=PlugStatus(switch=switch, power_w=power_w, energy_kwh=energy_kwh),
-        pc=_build_pc(states, pc_power_threshold_w=pc_power_threshold_w),
+        plug=PlugStatus(
+            switch=switch,
+            power_w=power_w,
+            energy_kwh=energy_kwh,
+            estimated_cost_won=_estimate_cost_won(energy_kwh, estimate_rate_won_per_kwh),
+        ),
+        pc=_build_pc(
+            states,
+            pc_power_threshold_w=pc_power_threshold_w,
+            estimate_rate_won_per_kwh=estimate_rate_won_per_kwh,
+        ),
+        electricity=ElectricityInfo(rate_won_per_kwh=estimate_rate_won_per_kwh),
         ac_estimated_running=ac_running,
         ac_auto_enabled=_build_ac_auto_enabled(states),
         ac_auto_state=_build_ac_auto_state(states),
@@ -229,4 +254,5 @@ async def fetch_and_build_status(ha: HAClient, settings: Settings) -> StatusResp
         states,
         ac_power_threshold_w=settings.ac_power_threshold_w,
         pc_power_threshold_w=settings.pc_power_threshold_w,
+        estimate_rate_won_per_kwh=settings.estimate_rate_won_per_kwh,
     )

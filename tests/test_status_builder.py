@@ -4,21 +4,33 @@ from pathlib import Path
 from app.services.status_builder import build_status_from_states
 
 FIXTURE = Path(__file__).parent / "fixtures" / "ha_states.json"
+ESTIMATE_RATE = 199.28
+
+
+def _build(states: dict, **overrides: float) -> object:
+    return build_status_from_states(
+        states,
+        ac_power_threshold_w=overrides.get("ac_power_threshold_w", 50),
+        pc_power_threshold_w=overrides.get("pc_power_threshold_w", 50),
+        estimate_rate_won_per_kwh=overrides.get("estimate_rate_won_per_kwh", ESTIMATE_RATE),
+    )
 
 
 def test_build_status_from_fixture():
     states = json.loads(FIXTURE.read_text(encoding="utf-8"))
-    status = build_status_from_states(
-        states, ac_power_threshold_w=50, pc_power_threshold_w=50
-    )
+    status = _build(states)
 
     assert status.plug.switch == "on"
     assert status.plug.power_w == 742.0
     assert status.plug.energy_kwh == 12.34
+    assert status.plug.estimated_cost_won == 2459
     assert status.pc.switch == "on"
     assert status.pc.power_w == 85.5
     assert status.pc.energy_today_kwh == 0.42
     assert status.pc.energy_month_kwh == 3.15
+    assert status.pc.estimated_cost_today_won == 84
+    assert status.pc.estimated_cost_month_won == 628
+    assert status.electricity.rate_won_per_kwh == ESTIMATE_RATE
     assert status.pc.online is True
     assert status.pc.wifi_signal_level == 3
     assert status.pc.overload is False
@@ -41,18 +53,14 @@ def test_build_status_from_fixture():
 def test_ac_off_below_threshold():
     states = json.loads(FIXTURE.read_text(encoding="utf-8"))
     states["sensor.hwiya_home_power"]["state"] = "10"
-    status = build_status_from_states(
-        states, ac_power_threshold_w=50, pc_power_threshold_w=50
-    )
+    status = _build(states)
     assert status.ac_estimated_running is False
 
 
 def test_pc_estimated_running_below_threshold():
     states = json.loads(FIXTURE.read_text(encoding="utf-8"))
     states["sensor.hwiya_pc_current_consumption"]["state"] = "10"
-    status = build_status_from_states(
-        states, ac_power_threshold_w=50, pc_power_threshold_w=50
-    )
+    status = _build(states)
     assert status.pc.estimated_running is False
 
 
@@ -61,11 +69,11 @@ def test_pc_defaults_when_entities_missing():
     for key in list(states):
         if key.startswith(("switch.hwiya_pc", "sensor.hwiya_pc", "binary_sensor.hwiya_pc")):
             del states[key]
-    status = build_status_from_states(
-        states, ac_power_threshold_w=50, pc_power_threshold_w=50
-    )
+    status = _build(states)
     assert status.pc.switch == "unknown"
     assert status.pc.power_w is None
+    assert status.pc.estimated_cost_today_won is None
+    assert status.pc.estimated_cost_month_won is None
     assert status.pc.online is False
     assert status.pc.overload is False
     assert status.pc.estimated_running is False
@@ -74,9 +82,24 @@ def test_pc_defaults_when_entities_missing():
 def test_unavailable_power_is_null():
     states = json.loads(FIXTURE.read_text(encoding="utf-8"))
     states["sensor.hwiya_home_power"]["state"] = "unavailable"
-    status = build_status_from_states(states, ac_power_threshold_w=50, pc_power_threshold_w=50)
+    status = _build(states)
     assert status.plug.power_w is None
     assert status.ac_estimated_running is False
+
+
+def test_estimate_cost_null_when_energy_unavailable():
+    states = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    states["sensor.hwiya_home_energy"]["state"] = "unavailable"
+    status = _build(states)
+    assert status.plug.energy_kwh is None
+    assert status.plug.estimated_cost_won is None
+
+
+def test_estimate_cost_rounding():
+    from app.services.status_builder import _estimate_cost_won
+
+    assert _estimate_cost_won(0.897, ESTIMATE_RATE) == 179
+    assert _estimate_cost_won(6.367, ESTIMATE_RATE) == 1269
 
 
 def _states_with_indoor(
@@ -100,7 +123,7 @@ def _states_with_indoor(
 
 
 def test_indoor_fahrenheit_to_celsius():
-    status = build_status_from_states(_states_with_indoor(), ac_power_threshold_w=50, pc_power_threshold_w=50)
+    status = _build(_states_with_indoor())
     assert status.indoor is not None
     assert status.indoor.temperature == 27.2
     assert status.indoor.humidity == 49.0
@@ -108,7 +131,7 @@ def test_indoor_fahrenheit_to_celsius():
 
 def test_indoor_celsius_passthrough():
     states = _states_with_indoor(temp_state="27.5", temp_unit="°C")
-    status = build_status_from_states(states, ac_power_threshold_w=50, pc_power_threshold_w=50)
+    status = _build(states)
     assert status.indoor is not None
     assert status.indoor.temperature == 27.5
     assert status.indoor.humidity == 49.0
@@ -116,19 +139,19 @@ def test_indoor_celsius_passthrough():
 
 def test_indoor_null_when_sensor_missing():
     states = json.loads(FIXTURE.read_text(encoding="utf-8"))
-    status = build_status_from_states(states, ac_power_threshold_w=50, pc_power_threshold_w=50)
+    status = _build(states)
     assert status.indoor is None
 
 
 def test_indoor_null_when_unavailable():
     states = _states_with_indoor(temp_state="unavailable")
-    status = build_status_from_states(states, ac_power_threshold_w=50, pc_power_threshold_w=50)
+    status = _build(states)
     assert status.indoor is None
 
 
 def test_indoor_null_when_humidity_unknown():
     states = _states_with_indoor(humidity_state="unknown")
-    status = build_status_from_states(states, ac_power_threshold_w=50, pc_power_threshold_w=50)
+    status = _build(states)
     assert status.indoor is None
 
 
@@ -143,7 +166,7 @@ def test_ac_auto_state_placeholder_unknown_maps_to_null():
             "last_transition": "unknown",
         },
     }
-    status = build_status_from_states(states, ac_power_threshold_w=50, pc_power_threshold_w=50)
+    status = _build(states)
     assert status.ac_auto_state is not None
     assert status.ac_auto_state.state == "unknown"
     assert status.ac_auto_state.last_on is None

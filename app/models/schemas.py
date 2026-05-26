@@ -13,6 +13,7 @@ class PlugStatus(BaseModel):
     switch: Literal["on", "off", "unavailable", "unknown"]
     power_w: float | None = None
     energy_kwh: float | None = None
+    estimated_cost_won: int | None = None
 
 
 class PcStatus(BaseModel):
@@ -20,6 +21,8 @@ class PcStatus(BaseModel):
     power_w: float | None = None
     energy_today_kwh: float | None = None
     energy_month_kwh: float | None = None
+    estimated_cost_today_won: int | None = None
+    estimated_cost_month_won: int | None = None
     online: bool
     wifi_signal_level: int | None = None
     overload: bool
@@ -50,9 +53,14 @@ class AcAutoState(BaseModel):
     last_transition: str | None = None
 
 
+class ElectricityInfo(BaseModel):
+    rate_won_per_kwh: float
+
+
 class StatusResponse(BaseModel):
     plug: PlugStatus
     pc: PcStatus
+    electricity: ElectricityInfo
     ac_estimated_running: bool
     ac_auto_enabled: bool | None = None
     ac_auto_state: AcAutoState | None = None

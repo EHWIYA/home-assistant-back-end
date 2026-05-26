@@ -26,6 +26,7 @@ async def main() -> int:
         by_id,
         ac_power_threshold_w=settings.ac_power_threshold_w,
         pc_power_threshold_w=settings.pc_power_threshold_w,
+        estimate_rate_won_per_kwh=settings.estimate_rate_won_per_kwh,
     )
     print(json.dumps(dto.model_dump(), ensure_ascii=False, indent=2))
     return 0

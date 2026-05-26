@@ -22,12 +22,18 @@ def _settings() -> Settings:
         iot_api_key="test-key",
         ac_power_threshold_w=50.0,
         pc_power_threshold_w=50.0,
+        estimate_rate_won_per_kwh=199.28,
     )
 
 
 def _status_from_fixture() -> StatusResponse:
     states = json.loads(FIXTURE.read_text(encoding="utf-8"))
-    return build_status_from_states(states, ac_power_threshold_w=50, pc_power_threshold_w=50)
+    return build_status_from_states(
+        states,
+        ac_power_threshold_w=50,
+        pc_power_threshold_w=50,
+        estimate_rate_won_per_kwh=199.28,
+    )
 
 
 def _app_with_key() -> TestClient:
