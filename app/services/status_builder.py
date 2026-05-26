@@ -139,6 +139,15 @@ def _build_pc(states: dict[str, dict[str, Any]], *, pc_power_threshold_w: float)
     )
 
 
+def _ac_auto_timestamp(value: Any) -> str | None:
+    if value is None:
+        return None
+    s = str(value).strip()
+    if s.lower() in ("unknown", "unavailable", "none", ""):
+        return None
+    return s
+
+
 def _build_ac_auto_enabled(states: dict[str, dict[str, Any]]) -> bool | None:
     raw = states.get(ENTITY_AC_AUTO_ENABLED)
     if not raw:
@@ -161,9 +170,9 @@ def _build_ac_auto_state(states: dict[str, dict[str, Any]]) -> AcAutoState | Non
     attrs = raw.get("attributes") or {}
     return AcAutoState(
         state=state,  # type: ignore[arg-type]
-        last_on=attrs.get("last_on"),
-        last_off=attrs.get("last_off"),
-        last_transition=attrs.get("last_transition"),
+        last_on=_ac_auto_timestamp(attrs.get("last_on")),
+        last_off=_ac_auto_timestamp(attrs.get("last_off")),
+        last_transition=_ac_auto_timestamp(attrs.get("last_transition")),
     )
 
 

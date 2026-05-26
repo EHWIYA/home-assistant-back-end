@@ -130,3 +130,22 @@ def test_indoor_null_when_humidity_unknown():
     states = _states_with_indoor(humidity_state="unknown")
     status = build_status_from_states(states, ac_power_threshold_w=50, pc_power_threshold_w=50)
     assert status.indoor is None
+
+
+def test_ac_auto_state_placeholder_unknown_maps_to_null():
+    states = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    states["sensor.hwiya_ac_auto_state"] = {
+        "entity_id": "sensor.hwiya_ac_auto_state",
+        "state": "unknown",
+        "attributes": {
+            "last_on": "unknown",
+            "last_off": "unknown",
+            "last_transition": "unknown",
+        },
+    }
+    status = build_status_from_states(states, ac_power_threshold_w=50, pc_power_threshold_w=50)
+    assert status.ac_auto_state is not None
+    assert status.ac_auto_state.state == "unknown"
+    assert status.ac_auto_state.last_on is None
+    assert status.ac_auto_state.last_off is None
+    assert status.ac_auto_state.last_transition is None
