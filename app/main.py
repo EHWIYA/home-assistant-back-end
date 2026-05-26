@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.db.seed import seed_strip_device
 from app.db.session import dispose_engine, init_engine
 from app.routers import ac, health, history, pc, plug, schedules, status, strip
+from app.services.ha_ws_cache import get_ha_state_cache
 
 
 @asynccontextmanager
@@ -17,7 +18,10 @@ async def lifespan(_app: FastAPI):
     init_engine(settings)
     if settings.strip_configured:
         await seed_strip_device(settings)
+    cache = get_ha_state_cache()
+    cache.start(settings)
     yield
+    await cache.stop()
     await dispose_engine()
 
 
@@ -26,7 +30,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="iot-api",
         description="BFF for Home Assistant + Hejhome PowerStrip (iot-web)",
-        version="1.3.0",
+        version="1.4.0",
         lifespan=lifespan,
     )
     app.add_middleware(

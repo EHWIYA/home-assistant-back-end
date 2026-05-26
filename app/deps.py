@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings, get_settings
@@ -10,18 +10,32 @@ from app.services.schedule_service import ScheduleService
 from app.services.strip_service import StripService
 
 
+def _check_api_key(provided: str | None, settings: Settings) -> None:
+    if not settings.iot_api_key:
+        raise UnauthorizedError("API key not configured on server")
+    if not provided or provided != settings.iot_api_key:
+        raise UnauthorizedError()
+
+
 def verify_api_key(
     x_api_key: Annotated[str | None, Header(alias="X-API-Key")] = None,
     settings: Settings = Depends(get_settings),
 ) -> None:
-    if not settings.iot_api_key:
-        raise UnauthorizedError("API key not configured on server")
-    if not x_api_key or x_api_key != settings.iot_api_key:
-        raise UnauthorizedError()
+    _check_api_key(x_api_key, settings)
+
+
+def verify_api_key_header_or_query(
+    x_api_key: Annotated[str | None, Header(alias="X-API-Key")] = None,
+    api_key: Annotated[str | None, Query(alias="api_key")] = None,
+    settings: Settings = Depends(get_settings),
+) -> None:
+    """X-API-Key header or ?api_key= for EventSource (no custom headers)."""
+    _check_api_key(x_api_key or api_key, settings)
 
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 ApiKeyDep = Annotated[None, Depends(verify_api_key)]
+ApiKeyHeaderOrQueryDep = Annotated[None, Depends(verify_api_key_header_or_query)]
 DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
 
 
