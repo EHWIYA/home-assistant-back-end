@@ -55,31 +55,42 @@ class HAClient:
             return resp.json()
 
     async def get_states_for(self, entity_ids: tuple[str, ...]) -> dict[str, dict[str, Any]]:
-        """Fetch multiple entities; missing IDs are omitted."""
-        result: dict[str, dict[str, Any]] = {}
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            for entity_id in entity_ids:
-                try:
-                    resp = await client.get(
-                        f"{self._base}/api/states/{entity_id}",
-                        headers=self._headers(),
-                    )
-                except httpx.TimeoutException:
-                    raise HAError(
-                        "Home Assistant request timed out",
-                        status_code=504,
-                        code="ha_timeout",
-                    )
-                except httpx.RequestError as exc:
-                    raise HAError(f"Home Assistant unreachable: {exc}", status_code=503)
+        """Fetch entities via one GET /api/states; missing IDs are omitted."""
+        if not entity_ids:
+            return {}
 
-                if resp.status_code == 200:
-                    result[entity_id] = resp.json()
-                elif resp.status_code == 404:
+        wanted = frozenset(entity_ids)
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            try:
+                resp = await client.get(
+                    f"{self._base}/api/states",
+                    headers=self._headers(),
+                )
+            except httpx.TimeoutException:
+                raise HAError(
+                    "Home Assistant request timed out",
+                    status_code=504,
+                    code="ha_timeout",
+                )
+            except httpx.RequestError as exc:
+                raise HAError(f"Home Assistant unreachable: {exc}", status_code=503)
+
+            if resp.status_code >= 500:
+                raise HAError("Home Assistant server error", status_code=502, code="ha_error")
+            if resp.status_code >= 400:
+                raise HAError("Home Assistant rejected request", status_code=502, code="ha_error")
+
+            by_id: dict[str, dict[str, Any]] = {}
+            for item in resp.json():
+                eid = item.get("entity_id")
+                if eid in wanted:
+                    by_id[eid] = item
+
+            for entity_id in entity_ids:
+                if entity_id not in by_id:
                     logger.warning("HA entity missing: %s", entity_id)
-                else:
-                    raise HAError("Home Assistant rejected request", status_code=502, code="ha_error")
-        return result
+
+            return by_id
 
     async def call_service(
         self,
