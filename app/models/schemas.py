@@ -94,6 +94,9 @@ class AcActionRequest(BaseModel):
 
 class AcActionResponse(BaseModel):
     ok: bool = True
+    request_id: str | None = None
+    applied_mode: Literal["off", "cool", "dry"] | None = None
+    power: Literal["on", "off"] | None = None
 
 
 class AcStateResponse(BaseModel):
