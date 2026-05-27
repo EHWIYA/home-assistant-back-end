@@ -96,6 +96,7 @@ def test_ac_returns_502_when_mode_sync_fails():
         )
 
     assert resp.status_code == 502
+    assert resp.headers["X-Request-ID"] == "req-sync-fail"
     payload = resp.json()
     assert payload["detail"]["code"] == "ac_mode_sync_failed"
 
@@ -116,5 +117,39 @@ def test_ac_returns_502_when_verified_mode_mismatch():
             )
 
     assert resp.status_code == 502
+    assert "X-Request-ID" in resp.headers
     payload = resp.json()
     assert payload["detail"]["code"] == "ac_state_mismatch"
+
+
+def test_ac_state_includes_consistency_metadata():
+    app, settings = _app_with_key()
+    with patch("app.routers.ac.HAClient") as mock_cls:
+        mock_ha = mock_cls.return_value
+        mock_ha.get_state = AsyncMock(return_value={"state": "cool"})
+        with patch("app.routers.ac.fetch_status", new=AsyncMock()) as mock_fetch_status:
+            mock_fetch_status.return_value = type(
+                "S",
+                (),
+                {
+                    "ac_estimated_running": False,
+                    "ac_auto_enabled": True,
+                    "ac_auto_state": type("A", (), {"state": "on"})(),
+                    "indoor": None,
+                },
+            )()
+            with patch("app.routers.ac._read_last_control", return_value=None):
+                client = TestClient(app)
+                resp = client.get(
+                    "/api/v1/ac/state",
+                    headers={"X-API-Key": settings.iot_api_key},
+                )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["mode"] == "cool"
+    assert payload["power"] == "off"
+    assert payload["state_consistent"] is False
+    assert payload["state_source"] == "composed(power_estimation,ha_input_select,ac_auto_sensor)"
+    assert payload["last_control_at"] is None
+    assert payload["last_control_result"] is None

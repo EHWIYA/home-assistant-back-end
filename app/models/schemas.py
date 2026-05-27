@@ -103,6 +103,10 @@ class AcStateResponse(BaseModel):
     power: Literal["on", "off"]
     mode: Literal["off", "cool", "dry"]
     auto_enabled: bool
+    state_consistent: bool
+    state_source: str
+    last_control_at: str | None = None
+    last_control_result: Literal["success", "failed"] | None = None
     temperature_c: float | None = None
     humidity: float | None = None
 

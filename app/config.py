@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     host: str = Field(default="0.0.0.0", alias="HOST")
     port: int = Field(default=8002, alias="PORT")
     ha_timeout_seconds: float = Field(default=10.0, alias="HA_TIMEOUT_SECONDS")
+    ac_state_reconcile_grace_seconds: int = Field(
+        default=20,
+        alias="AC_STATE_RECONCILE_GRACE_SECONDS",
+    )
 
     database_url: str = Field(default="", alias="DATABASE_URL")
     hejhome_base_url: str = Field(default="https://square.hej.so", alias="HEJHOME_BASE_URL")
