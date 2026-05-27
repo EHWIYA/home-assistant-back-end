@@ -20,8 +20,10 @@ ENTITY_AC_AUTO_ENABLED = "input_boolean.hwiya_ac_auto_enabled"
 ENTITY_AC_AUTO_STATE = "sensor.hwiya_ac_auto_state"
 ENTITY_AC_LAST_ON = "input_datetime.hwiya_ac_last_on"
 ENTITY_AC_LAST_OFF = "input_datetime.hwiya_ac_last_off"
+ENTITY_AC_MODE = "input_select.hwiya_ac_mode"
 AC_REMOTE_DEVICE = "ac"
-AC_COMMAND_ON = "ac_on"
+AC_COMMAND_COOL_PRESET_17 = "ac_preset_cool_17"
+AC_COMMAND_DRY_PRESET_17 = "ac_preset_dry_17"
 AC_COMMAND_OFF = "ac_off"
 
 STATUS_ENTITY_IDS = (
@@ -41,6 +43,7 @@ STATUS_ENTITY_IDS = (
     ENTITY_WEATHER,
     ENTITY_AC_AUTO_ENABLED,
     ENTITY_AC_AUTO_STATE,
+    ENTITY_AC_MODE,
 )
 
 # Hejhome OAuth (square.hej.so shop client — same as official app / homebridge-hejhome)

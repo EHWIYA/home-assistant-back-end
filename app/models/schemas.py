@@ -89,11 +89,19 @@ class PcActionResponse(BaseModel):
 
 
 class AcActionRequest(BaseModel):
-    action: Literal["on", "off"]
+    mode: Literal["off", "cool", "dry"]
 
 
 class AcActionResponse(BaseModel):
     ok: bool = True
+
+
+class AcStateResponse(BaseModel):
+    power: Literal["on", "off"]
+    mode: Literal["off", "cool", "dry"]
+    auto_enabled: bool
+    temperature_c: float | None = None
+    humidity: float | None = None
 
 
 class PowerHistoryPoint(BaseModel):
