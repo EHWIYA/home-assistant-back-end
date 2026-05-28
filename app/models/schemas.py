@@ -29,12 +29,6 @@ class PcStatus(BaseModel):
     estimated_running: bool
 
 
-class PersonStatus(BaseModel):
-    state: str
-    latitude: float | None = None
-    longitude: float | None = None
-
-
 class WeatherOutdoor(BaseModel):
     temperature: float | None = None
     humidity: float | int | None = None
@@ -64,7 +58,6 @@ class StatusResponse(BaseModel):
     ac_estimated_running: bool
     ac_auto_enabled: bool | None = None
     ac_auto_state: AcAutoState | None = None
-    person: PersonStatus
     indoor: IndoorClimate | None = None
     weather_outdoor: WeatherOutdoor | None = None
     updated_at: str
@@ -97,6 +90,17 @@ class AcActionResponse(BaseModel):
     request_id: str | None = None
     applied_mode: Literal["off", "cool", "dry"] | None = None
     power: Literal["on", "off"] | None = None
+
+
+class AcAutoToggleRequest(BaseModel):
+    enabled: bool
+
+
+class AcAutoToggleResponse(BaseModel):
+    ok: bool = True
+    request_id: str | None = None
+    auto_enabled: bool
+    plug_switch: Literal["on", "off", "unavailable", "unknown"]
 
 
 class AcStateResponse(BaseModel):

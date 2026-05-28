@@ -17,7 +17,6 @@ from app.constants import (
     ENTITY_PC_POWER,
     ENTITY_PC_SIGNAL,
     ENTITY_PC_SWITCH,
-    ENTITY_PERSON,
     ENTITY_PLUG_ENERGY,
     ENTITY_PLUG_POWER,
     ENTITY_PLUG_SWITCH,
@@ -29,7 +28,6 @@ from app.models.schemas import (
     ElectricityInfo,
     IndoorClimate,
     PcStatus,
-    PersonStatus,
     PlugStatus,
     StatusResponse,
     WeatherOutdoor,
@@ -200,7 +198,6 @@ def build_status_from_states(
     plug_switch_raw = states.get(ENTITY_PLUG_SWITCH, {})
     plug_power_raw = states.get(ENTITY_PLUG_POWER, {})
     plug_energy_raw = states.get(ENTITY_PLUG_ENERGY, {})
-    person_raw = states.get(ENTITY_PERSON, {})
     weather_raw = states.get(ENTITY_WEATHER, {})
 
     switch = _switch_state(plug_switch_raw.get("state"))
@@ -208,13 +205,6 @@ def build_status_from_states(
     energy_kwh = _parse_float(plug_energy_raw.get("state"))
 
     ac_running = power_w is not None and power_w >= ac_power_threshold_w
-
-    person_attrs = person_raw.get("attributes") or {}
-    person = PersonStatus(
-        state=str(person_raw.get("state", "unknown")),
-        latitude=_parse_float(person_attrs.get("latitude")),
-        longitude=_parse_float(person_attrs.get("longitude")),
-    )
 
     weather_attrs = weather_raw.get("attributes") or {}
     weather: WeatherOutdoor | None = None
@@ -241,7 +231,6 @@ def build_status_from_states(
         ac_estimated_running=ac_running,
         ac_auto_enabled=_build_ac_auto_enabled(states),
         ac_auto_state=_build_ac_auto_state(states),
-        person=person,
         indoor=_build_indoor(states),
         weather_outdoor=weather,
         updated_at=_now_kst_iso(),

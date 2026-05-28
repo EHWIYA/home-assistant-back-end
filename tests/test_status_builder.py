@@ -36,8 +36,6 @@ def test_build_status_from_fixture():
     assert status.pc.overload is False
     assert status.pc.estimated_running is True
     assert status.ac_estimated_running is True
-    assert status.person.state == "not_home"
-    assert status.person.latitude == 37.473
     assert status.weather_outdoor is not None
     assert status.weather_outdoor.temperature == 18.2
     assert status.ac_auto_enabled is True

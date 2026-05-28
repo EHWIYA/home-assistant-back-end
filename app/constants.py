@@ -13,7 +13,6 @@ ENTITY_PC_SIGNAL = "sensor.hwiya_pc_signal_level"
 ENTITY_PC_OVERLOAD = "binary_sensor.hwiya_pc_overloaded"
 ENTITY_INDOOR_TEMP = "sensor.hwiya_sensor_temperature"
 ENTITY_INDOOR_HUMIDITY = "sensor.hwiya_sensor_humidity"
-ENTITY_PERSON = "person.hwiya_ha"
 ENTITY_WEATHER = "weather.forecast_jib"
 ENTITY_AC_REMOTE = "remote.hwiya_sensor"
 ENTITY_AC_AUTO_ENABLED = "input_boolean.hwiya_ac_auto_enabled"
@@ -39,7 +38,6 @@ STATUS_ENTITY_IDS = (
     ENTITY_PC_OVERLOAD,
     ENTITY_INDOOR_TEMP,
     ENTITY_INDOOR_HUMIDITY,
-    ENTITY_PERSON,
     ENTITY_WEATHER,
     ENTITY_AC_AUTO_ENABLED,
     ENTITY_AC_AUTO_STATE,

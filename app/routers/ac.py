@@ -14,13 +14,22 @@ from app.constants import (
     AC_REMOTE_DEVICE,
     ENTITY_AC_MODE,
     ENTITY_AC_REMOTE,
+    ENTITY_AC_AUTO_ENABLED,
     ENTITY_AC_LAST_OFF,
     ENTITY_AC_LAST_ON,
+    ENTITY_PLUG_SWITCH,
 )
 from app.deps import ApiKeyDep, SettingsDep
-from app.models.schemas import AcActionRequest, AcActionResponse, AcStateResponse
+from app.models.schemas import (
+    AcActionRequest,
+    AcActionResponse,
+    AcAutoToggleRequest,
+    AcAutoToggleResponse,
+    AcStateResponse,
+)
 from app.services.ha_client import HAClient
 from app.services.status_service import fetch_status
+from app.services.status_builder import _switch_state
 
 router = APIRouter(prefix="/api/v1", tags=["ac"])
 logger = logging.getLogger(__name__)
@@ -265,4 +274,80 @@ async def set_ac(
         request_id=request_id,
         applied_mode=applied_mode,
         power=power,
+    )
+
+
+@router.post("/ac/auto", response_model=AcAutoToggleResponse)
+async def set_ac_auto(
+    body: AcAutoToggleRequest,
+    _key: ApiKeyDep,
+    settings: SettingsDep,
+    response: Response,
+    x_request_id: str | None = Header(default=None, alias="X-Request-ID"),
+) -> AcAutoToggleResponse:
+    request_id = x_request_id or str(uuid4())
+    response.headers["X-Request-ID"] = request_id
+
+    ha = HAClient(settings)
+    auto_service = "turn_on" if body.enabled else "turn_off"
+    plug_service = "turn_on" if body.enabled else "turn_off"
+
+    try:
+        await ha.call_service(
+            "input_boolean",
+            auto_service,
+            {"entity_id": ENTITY_AC_AUTO_ENABLED},
+        )
+    except Exception as exc:
+        logger.error(
+            "ac auto toggle failed request_id=%s enabled=%s error=%s",
+            request_id,
+            body.enabled,
+            exc,
+        )
+        _raise_ac_http_error(
+            request_id=request_id,
+            detail="AC auto toggle failed",
+            code="ac_auto_toggle_failed",
+        )
+
+    try:
+        await ha.call_service(
+            "switch",
+            plug_service,
+            {"entity_id": ENTITY_PLUG_SWITCH},
+        )
+    except Exception as exc:
+        logger.error(
+            "ac auto plug sync failed request_id=%s enabled=%s error=%s",
+            request_id,
+            body.enabled,
+            exc,
+        )
+        _raise_ac_http_error(
+            request_id=request_id,
+            detail="AC auto toggle succeeded but plug sync failed",
+            code="ac_auto_plug_sync_failed",
+        )
+
+    plug_state = await ha.get_state(ENTITY_PLUG_SWITCH)
+    switch = _switch_state(plug_state.get("state"))
+    expected_switch = "on" if body.enabled else "off"
+    if switch != expected_switch:
+        logger.error(
+            "ac auto verify mismatch request_id=%s enabled=%s plug_switch=%s",
+            request_id,
+            body.enabled,
+            switch,
+        )
+        _raise_ac_http_error(
+            request_id=request_id,
+            detail="AC auto toggle succeeded but plug state mismatch",
+            code="ac_auto_plug_state_mismatch",
+        )
+
+    return AcAutoToggleResponse(
+        request_id=request_id,
+        auto_enabled=body.enabled,
+        plug_switch=switch,
     )
