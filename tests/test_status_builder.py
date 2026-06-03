@@ -51,8 +51,17 @@ def test_build_status_from_fixture():
 def test_ac_off_below_threshold():
     states = json.loads(FIXTURE.read_text(encoding="utf-8"))
     states["sensor.hwiya_home_power"]["state"] = "10"
+    states["sensor.hwiya_ac_auto_state"]["state"] = "off"
     status = _build(states)
     assert status.ac_estimated_running is False
+
+
+def test_ac_running_when_logical_on_below_plug_threshold():
+    states = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    states["sensor.hwiya_home_power"]["state"] = "10"
+    states["sensor.hwiya_ac_auto_state"]["state"] = "on"
+    status = _build(states)
+    assert status.ac_estimated_running is True
 
 
 def test_pc_estimated_running_below_threshold():
@@ -80,6 +89,7 @@ def test_pc_defaults_when_entities_missing():
 def test_unavailable_power_is_null():
     states = json.loads(FIXTURE.read_text(encoding="utf-8"))
     states["sensor.hwiya_home_power"]["state"] = "unavailable"
+    states["sensor.hwiya_ac_auto_state"]["state"] = "off"
     status = _build(states)
     assert status.plug.power_w is None
     assert status.ac_estimated_running is False

@@ -19,6 +19,7 @@ ENTITY_AC_AUTO_ENABLED = "input_boolean.hwiya_ac_auto_enabled"
 ENTITY_AC_AUTO_STATE = "sensor.hwiya_ac_auto_state"
 ENTITY_AC_LAST_ON = "input_datetime.hwiya_ac_last_on"
 ENTITY_AC_LAST_OFF = "input_datetime.hwiya_ac_last_off"
+ENTITY_AC_PLUG_ACTIVE = "binary_sensor.hwiya_ac_plug_active"
 ENTITY_AC_MODE = "input_select.hwiya_ac_mode"
 AC_REMOTE_DEVICE = "ac"
 AC_COMMAND_COOL_PRESET_17 = "ac_preset_cool_17"
@@ -41,6 +42,9 @@ STATUS_ENTITY_IDS = (
     ENTITY_WEATHER,
     ENTITY_AC_AUTO_ENABLED,
     ENTITY_AC_AUTO_STATE,
+    ENTITY_AC_LAST_ON,
+    ENTITY_AC_LAST_OFF,
+    ENTITY_AC_PLUG_ACTIVE,
     ENTITY_AC_MODE,
 )
 

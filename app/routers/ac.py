@@ -29,12 +29,12 @@ from app.models.schemas import (
 )
 from app.services.ha_client import HAClient
 from app.services.status_service import fetch_status
-from app.services.status_builder import _switch_state
+from app.services.status_builder import _switch_state, resolve_ac_power
 
 router = APIRouter(prefix="/api/v1", tags=["ac"])
 logger = logging.getLogger(__name__)
 KST = ZoneInfo("Asia/Seoul")
-AC_STATE_SOURCE = "composed(power_estimation,ha_input_select,ac_auto_sensor)"
+AC_STATE_SOURCE = "composed(plug_w,ac_auto_state,ha_input_select)"
 _control_state_lock = Lock()
 _last_control: dict[str, str] | None = None
 
@@ -134,7 +134,11 @@ async def get_ac_state(
     except Exception as exc:
         logger.warning("failed to fetch ac mode: %s", exc)
 
-    power = "on" if status.ac_estimated_running else "off"
+    power, running_source = resolve_ac_power(
+        status.plug.power_w,
+        ac_power_threshold_w=settings.ac_power_threshold_w,
+        ac_auto_state=status.ac_auto_state,
+    )
     auto_enabled = bool(status.ac_auto_enabled)
     auto_state = status.ac_auto_state.state if status.ac_auto_state is not None else None
     last_control = _read_last_control()
@@ -150,6 +154,7 @@ async def get_ac_state(
 
     return AcStateResponse(
         power=power,
+        running_source=running_source,
         mode=mode,
         auto_enabled=auto_enabled,
         state_consistent=state_consistent,
@@ -269,7 +274,11 @@ async def set_ac(
         )
 
     _remember_control(applied_mode, "success")
-    power = "on" if status.ac_estimated_running else "off"
+    power, _ = resolve_ac_power(
+        status.plug.power_w,
+        ac_power_threshold_w=settings.ac_power_threshold_w,
+        ac_auto_state=status.ac_auto_state,
+    )
     return AcActionResponse(
         request_id=request_id,
         applied_mode=applied_mode,
@@ -290,7 +299,6 @@ async def set_ac_auto(
 
     ha = HAClient(settings)
     auto_service = "turn_on" if body.enabled else "turn_off"
-    plug_service = "turn_on" if body.enabled else "turn_off"
 
     try:
         await ha.call_service(
@@ -311,40 +319,43 @@ async def set_ac_auto(
             code="ac_auto_toggle_failed",
         )
 
-    try:
-        await ha.call_service(
-            "switch",
-            plug_service,
-            {"entity_id": ENTITY_PLUG_SWITCH},
-        )
-    except Exception as exc:
-        logger.error(
-            "ac auto plug sync failed request_id=%s enabled=%s error=%s",
-            request_id,
-            body.enabled,
-            exc,
-        )
-        _raise_ac_http_error(
-            request_id=request_id,
-            detail="AC auto toggle succeeded but plug sync failed",
-            code="ac_auto_plug_sync_failed",
-        )
+    if body.enabled:
+        try:
+            await ha.call_service(
+                "switch",
+                "turn_on",
+                {"entity_id": ENTITY_PLUG_SWITCH},
+            )
+        except Exception as exc:
+            logger.error(
+                "ac auto plug sync failed request_id=%s enabled=%s error=%s",
+                request_id,
+                body.enabled,
+                exc,
+            )
+            _raise_ac_http_error(
+                request_id=request_id,
+                detail="AC auto toggle succeeded but plug sync failed",
+                code="ac_auto_plug_sync_failed",
+            )
 
-    plug_state = await ha.get_state(ENTITY_PLUG_SWITCH)
-    switch = _switch_state(plug_state.get("state"))
-    expected_switch = "on" if body.enabled else "off"
-    if switch != expected_switch:
-        logger.error(
-            "ac auto verify mismatch request_id=%s enabled=%s plug_switch=%s",
-            request_id,
-            body.enabled,
-            switch,
-        )
-        _raise_ac_http_error(
-            request_id=request_id,
-            detail="AC auto toggle succeeded but plug state mismatch",
-            code="ac_auto_plug_state_mismatch",
-        )
+        plug_state = await ha.get_state(ENTITY_PLUG_SWITCH)
+        switch = _switch_state(plug_state.get("state"))
+        if switch != "on":
+            logger.error(
+                "ac auto verify mismatch request_id=%s enabled=%s plug_switch=%s",
+                request_id,
+                body.enabled,
+                switch,
+            )
+            _raise_ac_http_error(
+                request_id=request_id,
+                detail="AC auto toggle succeeded but plug state mismatch",
+                code="ac_auto_plug_state_mismatch",
+            )
+    else:
+        plug_state = await ha.get_state(ENTITY_PLUG_SWITCH)
+        switch = _switch_state(plug_state.get("state"))
 
     return AcAutoToggleResponse(
         request_id=request_id,

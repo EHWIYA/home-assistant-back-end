@@ -36,6 +36,8 @@ from app.services.ha_client import HAClient
 
 KST = ZoneInfo("Asia/Seoul")
 SwitchState = Literal["on", "off", "unavailable", "unknown"]
+AcPowerSource = Literal["plug", "logical"]
+AcPowerDisplay = Literal["on", "off"]
 
 
 def _now_kst_iso() -> str:
@@ -172,6 +174,38 @@ def _build_ac_auto_enabled(states: dict[str, dict[str, Any]]) -> bool | None:
     return None
 
 
+def ac_plug_running(power_w: float | None, *, ac_power_threshold_w: float) -> bool:
+    return power_w is not None and power_w >= ac_power_threshold_w
+
+
+def ac_logical_running(ac_auto_state: AcAutoState | None) -> bool:
+    return ac_auto_state is not None and ac_auto_state.state == "on"
+
+
+def ac_composite_running(
+    power_w: float | None,
+    *,
+    ac_power_threshold_w: float,
+    ac_auto_state: AcAutoState | None,
+) -> bool:
+    return ac_plug_running(power_w, ac_power_threshold_w=ac_power_threshold_w) or ac_logical_running(
+        ac_auto_state
+    )
+
+
+def resolve_ac_power(
+    power_w: float | None,
+    *,
+    ac_power_threshold_w: float,
+    ac_auto_state: AcAutoState | None,
+) -> tuple[AcPowerDisplay, AcPowerSource]:
+    if ac_plug_running(power_w, ac_power_threshold_w=ac_power_threshold_w):
+        return "on", "plug"
+    if ac_logical_running(ac_auto_state):
+        return "on", "logical"
+    return "off", "plug"
+
+
 def _build_ac_auto_state(states: dict[str, dict[str, Any]]) -> AcAutoState | None:
     raw = states.get(ENTITY_AC_AUTO_STATE)
     if not raw:
@@ -204,7 +238,12 @@ def build_status_from_states(
     power_w = _parse_float(plug_power_raw.get("state"))
     energy_kwh = _parse_float(plug_energy_raw.get("state"))
 
-    ac_running = power_w is not None and power_w >= ac_power_threshold_w
+    ac_auto_state = _build_ac_auto_state(states)
+    ac_running = ac_composite_running(
+        power_w,
+        ac_power_threshold_w=ac_power_threshold_w,
+        ac_auto_state=ac_auto_state,
+    )
 
     weather_attrs = weather_raw.get("attributes") or {}
     weather: WeatherOutdoor | None = None
@@ -230,7 +269,7 @@ def build_status_from_states(
         electricity=ElectricityInfo(rate_won_per_kwh=estimate_rate_won_per_kwh),
         ac_estimated_running=ac_running,
         ac_auto_enabled=_build_ac_auto_enabled(states),
-        ac_auto_state=_build_ac_auto_state(states),
+        ac_auto_state=ac_auto_state,
         indoor=_build_indoor(states),
         weather_outdoor=weather,
         updated_at=_now_kst_iso(),

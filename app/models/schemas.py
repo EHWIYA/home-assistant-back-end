@@ -105,6 +105,7 @@ class AcAutoToggleResponse(BaseModel):
 
 class AcStateResponse(BaseModel):
     power: Literal["on", "off"]
+    running_source: Literal["plug", "logical"]
     mode: Literal["off", "cool", "dry"]
     auto_enabled: bool
     state_consistent: bool
