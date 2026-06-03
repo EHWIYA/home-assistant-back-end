@@ -6,6 +6,7 @@
 # 흐름
 #   1) build-and-push — Docker build → GHCR push
 #   2) deploy-nas     — Tailscale join → SSH → /home/iwh/iot/api → compose pull/up
+#      COMPOSE_PROJECT_NAME=iot-api (디렉터리 api 만으로는 기본 project api → container_name 충돌)
 #
 # Secrets (deploy-nas)
 #   TS_AUTH_KEY, NAS_HOST, NAS_SSH_USER, NAS_SSH_KEY
@@ -25,6 +26,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   NAS_APP_DIR: /home/iwh/iot/api
+  COMPOSE_PROJECT_NAME: iot-api
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -97,6 +99,7 @@ jobs:
           script_stop: true
           script: |
             set -e
+            export COMPOSE_PROJECT_NAME=${{ env.COMPOSE_PROJECT_NAME }}
             cd ${{ env.NAS_APP_DIR }}
             docker compose pull
             docker compose up -d

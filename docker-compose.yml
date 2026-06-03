@@ -1,4 +1,5 @@
 # NAS: /home/iwh/iot/api/docker-compose.yml (경로는 서버 배치에 맞게)
+# 프로젝트명: COMPOSE_PROJECT_NAME=iot-api 또는 docker compose -p iot-api (디렉터리명 api만 쓰면 기본 project api)
 # .env (서버 관리, 커밋 금지):
 #   HA_BASE_URL=http://127.0.0.1:8123
 #   HOST=0.0.0.0

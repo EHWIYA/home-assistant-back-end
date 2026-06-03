@@ -61,7 +61,7 @@ docker exec iot-api python -m app.cli.scheduler
 3. Set `image:` in compose to your GHCR path
 4. **HA on host network (운영 확정):** iot-api `network_mode: host` + `HA_BASE_URL=http://127.0.0.1:8123` — bridge + `host.docker.internal` 는 UFW 에서 막힐 수 있음
 
-GitHub Actions (`deploy.yml`) builds to GHCR and SSHs to NAS for `docker compose pull && up -d`.
+GitHub Actions (`deploy.yml`) builds to GHCR and SSHs to NAS for `COMPOSE_PROJECT_NAME=iot-api docker compose pull && up -d` (NAS 운영 프로젝트명과 동일).
 
 ### Secrets (GitHub)
 
