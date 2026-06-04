@@ -71,6 +71,7 @@ def test_ac_returns_verified_state_and_request_id():
         "power": "on",
         "auto_enabled": None,
         "away_enabled": None,
+        "operating_mode": None,
     }
     assert mock_ha.call_service.await_count == 3
     first = mock_ha.call_service.await_args_list[0]
@@ -176,6 +177,102 @@ def test_ac_state_includes_consistency_metadata():
     assert payload["last_control_result"] is None
 
 
+def test_ac_post_operating_mode_auto_mutex():
+    app, settings = _app_with_key()
+    with patch("app.routers.ac.HAClient") as mock_cls:
+        mock_ha = mock_cls.return_value
+        mock_ha.call_service = AsyncMock(return_value=[])
+        async def _get_state(entity_id: str) -> dict:
+            if entity_id == ENTITY_AC_MODE:
+                return {"state": "auto"}
+            return {"state": "on"}
+
+        mock_ha.get_state = AsyncMock(side_effect=_get_state)
+        with patch("app.routers.ac.fetch_status", new=AsyncMock()) as mock_fetch_status:
+            mock_fetch_status.return_value = type(
+                "S",
+                (),
+                {
+                    "plug": type("P", (), {"power_w": 10.0})(),
+                    "ac_auto_state": type("A", (), {"state": "off"})(),
+                    "ac_auto_enabled": True,
+                    "ac_away_enabled": False,
+                },
+            )()
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/ac",
+                json={"mode": "auto", "operating_mode": "auto"},
+                headers={"X-API-Key": settings.iot_api_key},
+            )
+
+    assert resp.status_code == 200
+    assert resp.json()["operating_mode"] == "auto"
+    away_calls = [
+        c
+        for c in mock_ha.call_service.await_args_list
+        if c.args[:2] == ("input_boolean", "turn_off")
+        and c.args[2].get("entity_id") == ENTITY_AC_AWAY_ENABLED
+    ]
+    auto_on_calls = [
+        c
+        for c in mock_ha.call_service.await_args_list
+        if c.args[:2] == ("input_boolean", "turn_on")
+        and c.args[2].get("entity_id") == ENTITY_AC_AUTO_ENABLED
+    ]
+    assert away_calls
+    assert auto_on_calls
+
+
+def test_ac_post_mutex_disables_auto_when_away_enabled():
+    app, settings = _app_with_key()
+    with patch("app.routers.ac.HAClient") as mock_cls:
+        mock_ha = mock_cls.return_value
+        mock_ha.call_service = AsyncMock(return_value=[])
+        mock_ha.get_state = AsyncMock(return_value={"state": "cool"})
+        with patch("app.routers.ac.fetch_status", new=AsyncMock()) as mock_fetch_status:
+            mock_fetch_status.return_value = type(
+                "S",
+                (),
+                {
+                    "plug": type("P", (), {"power_w": 742.0})(),
+                    "ac_auto_state": None,
+                    "ac_auto_enabled": False,
+                    "ac_away_enabled": True,
+                    "ac_operating_mode": "away",
+                },
+            )()
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/ac",
+                json={"mode": "cool", "auto_enabled": True, "away_enabled": True},
+                headers={"X-API-Key": settings.iot_api_key},
+            )
+
+    assert resp.status_code == 200
+    auto_off = [
+        c
+        for c in mock_ha.call_service.await_args_list
+        if c.args[:2] == ("input_boolean", "turn_off")
+        and c.args[2].get("entity_id") == ENTITY_AC_AUTO_ENABLED
+    ]
+    assert auto_off
+
+
+def test_ac_thresholds_endpoint():
+    app, settings = _app_with_key()
+    client = TestClient(app)
+    resp = client.get(
+        "/api/v1/ac/thresholds",
+        headers={"X-API-Key": settings.iot_api_key},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["version"] == "v2"
+    assert "home_auto" in data
+    assert "away" in data
+
+
 def test_ac_auto_on_toggles_auto_and_plug():
     app, settings = _app_with_key()
     with patch("app.routers.ac.HAClient") as mock_cls:
@@ -197,14 +294,20 @@ def test_ac_auto_on_toggles_auto_and_plug():
         "auto_enabled": True,
         "plug_switch": "on",
     }
-    first = mock_ha.call_service.await_args_list[0]
-    second = mock_ha.call_service.await_args_list[1]
-    assert first.args == (
+    away_off = mock_ha.call_service.await_args_list[0]
+    auto_on = mock_ha.call_service.await_args_list[1]
+    plug_on = mock_ha.call_service.await_args_list[2]
+    assert away_off.args == (
+        "input_boolean",
+        "turn_off",
+        {"entity_id": ENTITY_AC_AWAY_ENABLED},
+    )
+    assert auto_on.args == (
         "input_boolean",
         "turn_on",
         {"entity_id": ENTITY_AC_AUTO_ENABLED},
     )
-    assert second.args == (
+    assert plug_on.args == (
         "switch",
         "turn_on",
         {"entity_id": ENTITY_PLUG_SWITCH},
@@ -239,7 +342,7 @@ def test_ac_auto_returns_502_when_plug_sync_fails():
     app, settings = _app_with_key()
     with patch("app.routers.ac.HAClient") as mock_cls:
         mock_ha = mock_cls.return_value
-        mock_ha.call_service = AsyncMock(side_effect=[[], Exception("plug boom")])
+        mock_ha.call_service = AsyncMock(side_effect=[[], [], Exception("plug boom")])
         client = TestClient(app)
         resp = client.post(
             "/api/v1/ac/auto",

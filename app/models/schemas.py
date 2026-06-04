@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, field_validator
 
 AcMode = Literal["off", "auto", "cool", "dry"]
 AcLastRunMode = Literal["cool", "dry"]
+AcOperatingMode = Literal["manual", "auto", "away"]
 
 
 class HealthResponse(BaseModel):
@@ -104,6 +105,13 @@ class StatusResponse(BaseModel):
     ac_estimated_running: bool
     ac_auto_enabled: bool | None = None
     ac_away_enabled: bool | None = None
+    ac_operating_mode: AcOperatingMode | None = Field(
+        default=None,
+        description=(
+            "HA 3모드 상호 배타 파생: away ON→away, else auto ON→auto, else 둘 다 OFF→manual. "
+            "input_boolean.hwiya_ac_auto_enabled / hwiya_ac_away_enabled 기준."
+        ),
+    )
     ac_mode: AcMode = "off"
     ac_last_run_mode: AcLastRunMode | None = None
     ac_auto_state: AcAutoState | None = None
@@ -143,6 +151,13 @@ class AcActionRequest(BaseModel):
     mode: AcMode
     auto_enabled: bool | None = None
     away_enabled: bool | None = None
+    operating_mode: AcOperatingMode | None = Field(
+        default=None,
+        description=(
+            "3모드 일괄 설정(manual/auto/away). 지정 시 auto_enabled·away_enabled보다 우선하며 "
+            "away↔auto 동시 ON을 API에서 선차단한다."
+        ),
+    )
 
 
 class AcActionResponse(BaseModel):
@@ -152,6 +167,7 @@ class AcActionResponse(BaseModel):
     power: Literal["on", "off"] | None = None
     auto_enabled: bool | None = None
     away_enabled: bool | None = None
+    operating_mode: AcOperatingMode | None = None
 
 
 class AcAutoToggleRequest(BaseModel):
@@ -171,6 +187,7 @@ class AcStateResponse(BaseModel):
     mode: AcMode
     auto_enabled: bool
     away_enabled: bool
+    operating_mode: AcOperatingMode | None = None
     last_run_mode: AcLastRunMode | None = None
     state_consistent: bool
     state_source: str
@@ -178,6 +195,23 @@ class AcStateResponse(BaseModel):
     last_control_result: Literal["success", "failed"] | None = None
     temperature_c: float | None = None
     humidity: float | None = None
+
+
+class AcThresholdRule(BaseModel):
+    """HA automation 임계값 v2 요약 (NAS 2026-06-04). 실제 판정은 HA에서 수행."""
+
+    on: str
+    off: str
+    notes: str | None = None
+
+
+class AcThresholdsResponse(BaseModel):
+    version: str = Field(default="v2", examples=["v2"])
+    home_auto: AcThresholdRule
+    away: AcThresholdRule
+    mutex: str = Field(
+        default="manual(auto·away OFF) | auto(auto ON) | away(away ON) — HA input_boolean 상호 배타",
+    )
 
 
 class PowerHistoryPoint(BaseModel):

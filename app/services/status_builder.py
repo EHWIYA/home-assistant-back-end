@@ -30,6 +30,7 @@ from app.models.schemas import (
     AcAutoState,
     AcLastRunMode,
     AcMode,
+    AcOperatingMode,
     ElectricityInfo,
     IndoorClimate,
     PcStatus,
@@ -193,6 +194,46 @@ def _build_ac_away_enabled(states: dict[str, dict[str, Any]]) -> bool | None:
     return None
 
 
+def derive_ac_operating_mode(
+    *,
+    auto_enabled: bool | None,
+    away_enabled: bool | None,
+) -> AcOperatingMode | None:
+    if away_enabled is True:
+        return "away"
+    if auto_enabled is True:
+        return "auto"
+    if away_enabled is False and auto_enabled is not True:
+        return "manual"
+    if auto_enabled is False and away_enabled is not True:
+        return "manual"
+    return None
+
+
+def resolve_ac_mutex_toggles(
+    *,
+    auto_enabled: bool | None = None,
+    away_enabled: bool | None = None,
+    operating_mode: AcOperatingMode | None = None,
+) -> tuple[bool | None, bool | None]:
+    if operating_mode == "manual":
+        return False, False
+    if operating_mode == "auto":
+        return True, False
+    if operating_mode == "away":
+        return False, True
+
+    auto = auto_enabled
+    away = away_enabled
+    if auto is True and away is True:
+        auto = False
+    elif auto is True:
+        away = False
+    elif away is True:
+        auto = False
+    return auto, away
+
+
 def parse_ac_mode(raw: dict[str, Any] | None) -> AcMode:
     if not raw:
         return "off"
@@ -294,6 +335,8 @@ def build_status_from_states(
     power_w = _parse_float(plug_power_raw.get("state"))
     energy_kwh = _parse_float(plug_energy_raw.get("state"))
 
+    ac_auto_enabled = _build_ac_auto_enabled(states)
+    ac_away_enabled = _build_ac_away_enabled(states)
     ac_auto_state = _build_ac_auto_state(states, last_run_mode=_build_ac_last_run_mode(states))
     ac_running = ac_composite_running(
         power_w,
@@ -324,8 +367,12 @@ def build_status_from_states(
         ),
         electricity=ElectricityInfo(rate_won_per_kwh=estimate_rate_won_per_kwh),
         ac_estimated_running=ac_running,
-        ac_auto_enabled=_build_ac_auto_enabled(states),
-        ac_away_enabled=_build_ac_away_enabled(states),
+        ac_auto_enabled=ac_auto_enabled,
+        ac_away_enabled=ac_away_enabled,
+        ac_operating_mode=derive_ac_operating_mode(
+            auto_enabled=ac_auto_enabled,
+            away_enabled=ac_away_enabled,
+        ),
         ac_mode=_build_ac_mode(states),
         ac_last_run_mode=_build_ac_last_run_mode(states),
         ac_auto_state=ac_auto_state,

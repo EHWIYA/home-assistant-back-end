@@ -30,7 +30,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="iot-api",
         description="BFF for Home Assistant + Hejhome PowerStrip (iot-web)",
-        version="1.6.0",
+        version="1.7.0",
         lifespan=lifespan,
     )
     app.add_middleware(

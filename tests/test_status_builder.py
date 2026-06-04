@@ -1,7 +1,11 @@
 import json
 from pathlib import Path
 
-from app.services.status_builder import build_status_from_states
+from app.services.status_builder import (
+    build_status_from_states,
+    derive_ac_operating_mode,
+    resolve_ac_mutex_toggles,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "ha_states.json"
 ESTIMATE_RATE = 199.28
@@ -40,6 +44,7 @@ def test_build_status_from_fixture():
     assert status.weather_outdoor.temperature == 18.2
     assert status.ac_auto_enabled is True
     assert status.ac_away_enabled is False
+    assert status.ac_operating_mode == "auto"
     assert status.ac_mode == "cool"
     assert status.ac_last_run_mode == "cool"
     assert status.ac_auto_state is not None
@@ -218,3 +223,24 @@ def test_ac_away_enabled_true():
     states["input_boolean.hwiya_ac_away_enabled"]["state"] = "on"
     status = _build(states)
     assert status.ac_away_enabled is True
+    assert status.ac_operating_mode == "away"
+
+
+def test_derive_ac_operating_mode_away_over_auto():
+    assert derive_ac_operating_mode(auto_enabled=True, away_enabled=True) == "away"
+
+
+def test_resolve_ac_mutex_both_true_prefers_away():
+    assert resolve_ac_mutex_toggles(auto_enabled=True, away_enabled=True) == (False, True)
+
+
+def test_resolve_ac_mutex_operating_mode_auto():
+    assert resolve_ac_mutex_toggles(operating_mode="auto") == (True, False)
+
+
+def test_ac_operating_mode_manual():
+    states = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    states["input_boolean.hwiya_ac_auto_enabled"]["state"] = "off"
+    states["input_boolean.hwiya_ac_away_enabled"]["state"] = "off"
+    status = _build(states)
+    assert status.ac_operating_mode == "manual"

@@ -11,7 +11,7 @@
 | 항목 | 결과 |
 |------|------|
 | `ac_on` 참조 | **없음** (`app/constants.py`: `ac_preset_cool_17`, `ac_preset_dry_17`, `ac_off`만 사용) |
-| NAS 이미지 버전 | 백엔드 로컬에서 NAS 컨테이너 직접 확인 불가. **서버에서** `docker inspect iot-api --format '{{.Image}}'` 또는 `curl -s http://127.0.0.1:8002/health` 후 최근 `main` push·GHA deploy 시각과 대조 권장 |
+| NAS 이미지 버전 | **70892cb** — GHCR push ✅, GHA NAS deploy ❌ (run #21). 서버 수동 `compose pull/up` 필요. 배포 후 `/ac/state`에 `running_source` 있으면 신규 이미지 |
 
 ---
 

@@ -28,10 +28,18 @@ from app.models.schemas import (
     AcAutoToggleResponse,
     AcMode,
     AcStateResponse,
+    AcThresholdRule,
+    AcThresholdsResponse,
 )
 from app.services.ha_client import HAClient
 from app.services.status_service import fetch_status
-from app.services.status_builder import AC_MODES, _switch_state, resolve_ac_power
+from app.services.status_builder import (
+    AC_MODES,
+    _switch_state,
+    derive_ac_operating_mode,
+    resolve_ac_mutex_toggles,
+    resolve_ac_power,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["ac"])
 logger = logging.getLogger(__name__)
@@ -208,6 +216,26 @@ async def _toggle_ac_auto_enabled(
     return _switch_state(plug_state.get("state"))
 
 
+@router.get(
+    "/ac/thresholds",
+    response_model=AcThresholdsResponse,
+    summary="에어컨 자동/외출 임계값 v2 (HA automation 정본)",
+)
+async def get_ac_thresholds(_key: ApiKeyDep) -> AcThresholdsResponse:
+    return AcThresholdsResponse(
+        home_auto=AcThresholdRule(
+            on="실내 ≥25°C(5분) 또는 습≥60%(10분); 습 스냅 ≥65% 즉시 ON",
+            off="실내 <25°C 및 습<55%; 습 스냅 <50% 즉시 OFF",
+            notes="자동 모드(input_boolean.hwiya_ac_auto_enabled ON) 시 HA automation 적용",
+        ),
+        away=AcThresholdRule(
+            on="실내 ≥27°C 또는 습≥60%(10분)",
+            off="실내 <27°C 및 습<60%",
+            notes="외출 모드(input_boolean.hwiya_ac_away_enabled ON) 시 HA automation 적용",
+        ),
+    )
+
+
 @router.get("/ac/state", response_model=AcStateResponse)
 async def get_ac_state(
     _key: ApiKeyDep,
@@ -241,6 +269,10 @@ async def get_ac_state(
         mode=mode,
         auto_enabled=auto_enabled,
         away_enabled=away_enabled,
+        operating_mode=derive_ac_operating_mode(
+            auto_enabled=status.ac_auto_enabled,
+            away_enabled=status.ac_away_enabled,
+        ),
         last_run_mode=status.ac_last_run_mode,
         state_consistent=state_consistent,
         state_source=AC_STATE_SOURCE,
@@ -263,6 +295,12 @@ async def set_ac(
     response.headers["X-Request-ID"] = request_id
 
     ha = HAClient(settings)
+
+    auto_toggle, away_toggle = resolve_ac_mutex_toggles(
+        auto_enabled=body.auto_enabled,
+        away_enabled=body.away_enabled,
+        operating_mode=body.operating_mode,
+    )
 
     if body.mode != "auto":
         if body.mode == "off":
@@ -315,15 +353,15 @@ async def set_ac(
                 code="ac_timestamp_sync_failed",
             )
 
-    if body.away_enabled is not None:
+    if away_toggle is not None:
         try:
-            await _toggle_ac_away(ha, body.away_enabled)
+            await _toggle_ac_away(ha, away_toggle)
         except Exception as exc:
             _remember_control(body.mode, "failed")
             logger.error(
                 "ac away toggle failed request_id=%s away_enabled=%s error=%s",
                 request_id,
-                body.away_enabled,
+                away_toggle,
                 exc,
             )
             _raise_ac_http_error(
@@ -332,11 +370,11 @@ async def set_ac(
                 code="ac_away_toggle_failed",
             )
 
-    if body.auto_enabled is not None:
+    if auto_toggle is not None:
         try:
             await _toggle_ac_auto_enabled(
                 ha,
-                enabled=body.auto_enabled,
+                enabled=auto_toggle,
                 request_id=request_id,
             )
         except HTTPException:
@@ -346,7 +384,7 @@ async def set_ac(
             logger.error(
                 "ac auto toggle failed request_id=%s auto_enabled=%s error=%s",
                 request_id,
-                body.auto_enabled,
+                auto_toggle,
                 exc,
             )
             _raise_ac_http_error(
@@ -392,12 +430,25 @@ async def set_ac(
         ac_power_threshold_w=settings.ac_power_threshold_w,
         ac_auto_state=status.ac_auto_state,
     )
+    toggled_mutex = (
+        body.operating_mode is not None
+        or body.auto_enabled is not None
+        or body.away_enabled is not None
+    )
     return AcActionResponse(
         request_id=request_id,
         applied_mode=applied_mode,  # type: ignore[arg-type]
         power=power,
-        auto_enabled=status.ac_auto_enabled if body.auto_enabled is not None else None,
-        away_enabled=status.ac_away_enabled if body.away_enabled is not None else None,
+        auto_enabled=status.ac_auto_enabled if toggled_mutex else None,
+        away_enabled=status.ac_away_enabled if toggled_mutex else None,
+        operating_mode=(
+            derive_ac_operating_mode(
+                auto_enabled=status.ac_auto_enabled,
+                away_enabled=status.ac_away_enabled,
+            )
+            if toggled_mutex
+            else None
+        ),
     )
 
 
@@ -413,10 +464,13 @@ async def set_ac_auto(
     response.headers["X-Request-ID"] = request_id
 
     ha = HAClient(settings)
+    auto_toggle, away_toggle = resolve_ac_mutex_toggles(auto_enabled=body.enabled)
     try:
+        if away_toggle is not None:
+            await _toggle_ac_away(ha, away_toggle)
         switch = await _toggle_ac_auto_enabled(
             ha,
-            enabled=body.enabled,
+            enabled=auto_toggle if auto_toggle is not None else body.enabled,
             request_id=request_id,
         )
     except HTTPException:
