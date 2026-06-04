@@ -198,7 +198,7 @@ class AcStateResponse(BaseModel):
 
 
 class AcThresholdRule(BaseModel):
-    """HA automation 임계값 v2.1 요약 (AC 가드·재가동). 실제 판정은 HA에서 수행."""
+    """HA automation 임계값 v2.2 요약 (AC 가드·재가동·스마트 ON). 실제 판정은 HA에서 수행."""
 
     on: str
     off: str
@@ -206,7 +206,7 @@ class AcThresholdRule(BaseModel):
 
 
 class AcThresholdsResponse(BaseModel):
-    version: str = Field(default="v2.1", examples=["v2.1"])
+    version: str = Field(default="v2.2", examples=["v2.2"])
     home_auto: AcThresholdRule
     away: AcThresholdRule
     mutex: str = Field(

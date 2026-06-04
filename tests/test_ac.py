@@ -268,10 +268,16 @@ def test_ac_thresholds_endpoint():
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["version"] == "v2.1"
+    assert data["version"] == "v2.2"
     assert "<25°C·습<55%(10분)" in data["home_auto"]["off"]
     assert "<50%·<25°C" in data["home_auto"]["off"]
     assert "OFF 후 재가동" in data["home_auto"]["on"]
+    assert ">26°C" in data["home_auto"]["on"]
+    assert "냉방" in data["home_auto"]["on"]
+    assert "제습" in data["home_auto"]["on"]
+    assert "스마트 ON" in data["home_auto"]["on"]
+    assert "26°C" in data["home_auto"]["notes"]
+    assert "스마트 ON" in data["away"]["on"]
     assert "home_auto" in data
     assert "away" in data
 

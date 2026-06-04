@@ -216,23 +216,36 @@ async def _toggle_ac_auto_enabled(
     return _switch_state(plug_state.get("state"))
 
 
+_SMART_ON_NOTE = "스마트 ON(모드 auto): >26°C 냉방, ≤26°C 제습"
+
+
 @router.get(
     "/ac/thresholds",
     response_model=AcThresholdsResponse,
-    summary="에어컨 자동/외출 임계값 v2.1 (HA automation 정본)",
+    summary="에어컨 자동/외출 임계값 v2.2 (HA automation 정본)",
 )
 async def get_ac_thresholds(_key: ApiKeyDep) -> AcThresholdsResponse:
     return AcThresholdsResponse(
-        version="v2.1",
+        version="v2.2",
         home_auto=AcThresholdRule(
-            on="실내 ≥25°C(5분, OFF 후 재가동) 또는 습≥60%(10분); 습 스냅 ≥65% 즉시 ON",
+            on=(
+                "실내 ≥25°C(5분, OFF 후 재가동) 또는 습≥60%(10분); "
+                "습 스냅 ≥65% 즉시 ON; "
+                f"{_SMART_ON_NOTE}"
+            ),
             off="온도: <25°C·습<55%(10분); 습 스냅: <50%·<25°C 즉시 OFF",
-            notes="자동 모드(input_boolean.hwiya_ac_auto_enabled ON) 시 HA automation v2.1 적용",
+            notes=(
+                "자동 모드(input_boolean.hwiya_ac_auto_enabled ON) 시 HA automation v2.2 적용; "
+                "수동 cool/dry 선택 시 26°C 스마트 ON 규칙 미적용"
+            ),
         ),
         away=AcThresholdRule(
-            on="실내 ≥27°C 또는 습≥60%(10분)",
+            on=f"실내 ≥27°C 또는 습≥60%(10분); {_SMART_ON_NOTE}",
             off="실내 <27°C 및 습<60%",
-            notes="외출 모드(input_boolean.hwiya_ac_away_enabled ON) 시 HA automation 적용",
+            notes=(
+                "외출 모드(input_boolean.hwiya_ac_away_enabled ON) 시 HA automation v2.2 적용; "
+                "수동 cool/dry 선택 시 26°C 스마트 ON 규칙 미적용"
+            ),
         ),
     )
 
