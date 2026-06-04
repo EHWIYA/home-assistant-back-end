@@ -273,30 +273,38 @@ _SMART_ON_NOTE = "스마트 ON(모드 auto): >26°C 냉방, ≤26°C 제습"
 @router.get(
     "/ac/thresholds",
     response_model=AcThresholdsResponse,
-    summary="에어컨 자동/외출 임계값 v2.2 (HA automation 정본)",
+    summary="에어컨 자동/외출 임계값 v3.0 (HA automation 정본)",
 )
 async def get_ac_thresholds(_key: ApiKeyDep) -> AcThresholdsResponse:
     return AcThresholdsResponse(
-        version="v2.2",
+        version="v3.0",
         home_auto=AcThresholdRule(
             on=(
-                "실내 ≥25°C(5분, OFF 후 재가동) 또는 습≥60%(10분); "
-                "습 스냅 ≥65% 즉시 ON; "
+                "실내 ≥26°C(15분, OFF 후 재가동); "
                 f"{_SMART_ON_NOTE}"
             ),
-            off="온도: <25°C·습<55%(10분); 습 스냅: <50%·<25°C 즉시 OFF",
+            off="온도 <24°C 또는 (습도 OFF·온 <26°C)",
             notes=(
-                "자동 모드(input_boolean.hwiya_ac_auto_enabled ON) 시 HA automation v2.2 적용; "
-                "수동 cool/dry 선택 시 26°C 스마트 ON 규칙 미적용"
+                "자동 모드(input_boolean.hwiya_ac_auto_enabled ON) 시 HA automation v3.0 적용; "
+                "input_select=off일 때만 auto·away OFF(cool/dry 시 auto 유지); "
+                "수동 cool/dry: 스마트 ON만 해당(센서 자동 ON/OFF 미적용)"
             ),
         ),
         away=AcThresholdRule(
-            on=f"실내 ≥27°C 또는 습≥60%(10분); {_SMART_ON_NOTE}",
-            off="실내 <27°C 및 습<60%",
-            notes=(
-                "외출 모드(input_boolean.hwiya_ac_away_enabled ON) 시 HA automation v2.2 적용; "
-                "수동 cool/dry 선택 시 26°C 스마트 ON 규칙 미적용"
+            on=(
+                "실내 ≥26°C(15분, OFF 후 재가동); "
+                f"{_SMART_ON_NOTE}"
             ),
+            off="온도 <24°C 또는 (습도 OFF·온 <26°C)",
+            notes=(
+                "외출 모드(input_boolean.hwiya_ac_away_enabled ON) 시 HA automation v3.0 적용; "
+                "input_select=off일 때만 auto·away OFF(cool/dry 시 auto 유지); "
+                "수동 cool/dry: 스마트 ON만 해당"
+            ),
+        ),
+        mutex=(
+            "input_select=off 시만 input_boolean auto·away OFF; "
+            "cool/dry 선택 시 hwiya_ac_auto_enabled 유지 — HA automation v3.0"
         ),
     )
 
