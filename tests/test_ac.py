@@ -7,10 +7,12 @@ from app.constants import (
     AC_COMMAND_COOL_PRESET_17,
     AC_REMOTE_DEVICE,
     ENTITY_AC_AWAY_ENABLED,
+    ENTITY_AC_AUTO_ENABLED,
     ENTITY_AC_LAST_ON,
     ENTITY_AC_MODE,
     ENTITY_AC_REMOTE,
-    ENTITY_AC_AUTO_ENABLED,
+    ENTITY_AC_SCRIPT_SMART_ON,
+    ENTITY_AC_SCRIPT_TURN_OFF,
     ENTITY_PLUG_SWITCH,
 )
 from app.deps import verify_api_key
@@ -103,12 +105,14 @@ def test_ac_returns_502_when_mode_sync_fails():
     with patch("app.routers.ac.HAClient") as mock_cls:
         mock_ha = mock_cls.return_value
         mock_ha.call_service = AsyncMock(side_effect=[[], Exception("boom")])
-        client = TestClient(app)
-        resp = client.post(
-            "/api/v1/ac",
-            json={"mode": "cool"},
-            headers={"X-API-Key": settings.iot_api_key, "X-Request-ID": "req-sync-fail"},
-        )
+        with patch("app.routers.ac.fetch_status", new=AsyncMock()) as mock_fetch_status:
+            mock_fetch_status.return_value = _status_stub()
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/ac",
+                json={"mode": "cool"},
+                headers={"X-API-Key": settings.iot_api_key, "X-Request-ID": "req-sync-fail"},
+            )
 
     assert resp.status_code == 502
     assert resp.headers["X-Request-ID"] == "req-sync-fail"
@@ -123,7 +127,7 @@ def test_ac_returns_502_when_verified_mode_mismatch():
         mock_ha.call_service = AsyncMock(return_value=[])
         mock_ha.get_state = AsyncMock(return_value={"state": "off"})
         with patch("app.routers.ac.fetch_status", new=AsyncMock()) as mock_fetch_status:
-            mock_fetch_status.return_value = type("S", (), {"ac_estimated_running": False})()
+            mock_fetch_status.return_value = _status_stub(power_w=742.0, auto_enabled=False)
             client = TestClient(app)
             resp = client.post(
                 "/api/v1/ac",
@@ -189,16 +193,7 @@ def test_ac_post_operating_mode_auto_mutex():
 
         mock_ha.get_state = AsyncMock(side_effect=_get_state)
         with patch("app.routers.ac.fetch_status", new=AsyncMock()) as mock_fetch_status:
-            mock_fetch_status.return_value = type(
-                "S",
-                (),
-                {
-                    "plug": type("P", (), {"power_w": 10.0})(),
-                    "ac_auto_state": type("A", (), {"state": "off"})(),
-                    "ac_auto_enabled": True,
-                    "ac_away_enabled": False,
-                },
-            )()
+            mock_fetch_status.return_value = _status_stub()
             client = TestClient(app)
             resp = client.post(
                 "/api/v1/ac",
@@ -208,6 +203,7 @@ def test_ac_post_operating_mode_auto_mutex():
 
     assert resp.status_code == 200
     assert resp.json()["operating_mode"] == "auto"
+    assert _smart_on_calls(mock_ha)
     away_calls = [
         c
         for c in mock_ha.call_service.await_args_list
@@ -288,12 +284,14 @@ def test_ac_auto_on_toggles_auto_and_plug():
         mock_ha = mock_cls.return_value
         mock_ha.call_service = AsyncMock(return_value=[])
         mock_ha.get_state = AsyncMock(return_value={"state": "on"})
-        client = TestClient(app)
-        resp = client.post(
-            "/api/v1/ac/auto",
-            json={"enabled": True},
-            headers={"X-API-Key": settings.iot_api_key, "X-Request-ID": "req-auto-on"},
-        )
+        with patch("app.routers.ac.fetch_status", new=AsyncMock()) as mock_fetch_status:
+            mock_fetch_status.return_value = _status_stub()
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/ac/auto",
+                json={"enabled": True},
+                headers={"X-API-Key": settings.iot_api_key, "X-Request-ID": "req-auto-on"},
+            )
 
     assert resp.status_code == 200
     assert resp.headers["X-Request-ID"] == "req-auto-on"
@@ -306,6 +304,7 @@ def test_ac_auto_on_toggles_auto_and_plug():
     away_off = mock_ha.call_service.await_args_list[0]
     auto_on = mock_ha.call_service.await_args_list[1]
     plug_on = mock_ha.call_service.await_args_list[2]
+    smart_on = mock_ha.call_service.await_args_list[3]
     assert away_off.args == (
         "input_boolean",
         "turn_off",
@@ -321,6 +320,8 @@ def test_ac_auto_on_toggles_auto_and_plug():
         "turn_on",
         {"entity_id": ENTITY_PLUG_SWITCH},
     )
+    assert smart_on.args[:2] == ("script", "turn_on")
+    assert smart_on.args[2]["entity_id"] == ENTITY_AC_SCRIPT_SMART_ON
 
 
 def test_ac_auto_off_only_toggles_boolean():
@@ -329,12 +330,14 @@ def test_ac_auto_off_only_toggles_boolean():
         mock_ha = mock_cls.return_value
         mock_ha.call_service = AsyncMock(return_value=[])
         mock_ha.get_state = AsyncMock(return_value={"state": "on"})
-        client = TestClient(app)
-        resp = client.post(
-            "/api/v1/ac/auto",
-            json={"enabled": False},
-            headers={"X-API-Key": settings.iot_api_key},
-        )
+        with patch("app.routers.ac.fetch_status", new=AsyncMock()) as mock_fetch_status:
+            mock_fetch_status.return_value = _status_stub()
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/ac/auto",
+                json={"enabled": False},
+                headers={"X-API-Key": settings.iot_api_key},
+            )
 
     assert resp.status_code == 200
     assert resp.json()["auto_enabled"] is False
@@ -352,12 +355,14 @@ def test_ac_auto_returns_502_when_plug_sync_fails():
     with patch("app.routers.ac.HAClient") as mock_cls:
         mock_ha = mock_cls.return_value
         mock_ha.call_service = AsyncMock(side_effect=[[], [], Exception("plug boom")])
-        client = TestClient(app)
-        resp = client.post(
-            "/api/v1/ac/auto",
-            json={"enabled": True},
-            headers={"X-API-Key": settings.iot_api_key, "X-Request-ID": "req-auto-fail"},
-        )
+        with patch("app.routers.ac.fetch_status", new=AsyncMock()) as mock_fetch_status:
+            mock_fetch_status.return_value = _status_stub()
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/ac/auto",
+                json={"enabled": True},
+                headers={"X-API-Key": settings.iot_api_key, "X-Request-ID": "req-auto-fail"},
+            )
 
     assert resp.status_code == 502
     assert resp.headers["X-Request-ID"] == "req-auto-fail"
@@ -371,35 +376,50 @@ def test_ac_auto_returns_502_when_plug_state_mismatch():
         mock_ha = mock_cls.return_value
         mock_ha.call_service = AsyncMock(return_value=[])
         mock_ha.get_state = AsyncMock(return_value={"state": "off"})
-        client = TestClient(app)
-        resp = client.post(
-            "/api/v1/ac/auto",
-            json={"enabled": True},
-            headers={"X-API-Key": settings.iot_api_key},
-        )
+        with patch("app.routers.ac.fetch_status", new=AsyncMock()) as mock_fetch_status:
+            mock_fetch_status.return_value = _status_stub()
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/ac/auto",
+                json={"enabled": True},
+                headers={"X-API-Key": settings.iot_api_key},
+            )
 
     assert resp.status_code == 502
     payload = resp.json()
     assert payload["detail"]["code"] == "ac_auto_plug_state_mismatch"
 
 
-def test_ac_mode_auto_skips_ir_and_sets_input_select():
+def _status_stub(*, power_w: float = 10.0, auto_state: str = "off", auto_enabled: bool = True):
+    return type(
+        "S",
+        (),
+        {
+            "plug": type("P", (), {"power_w": power_w})(),
+            "ac_auto_state": type("A", (), {"state": auto_state})(),
+            "ac_auto_enabled": auto_enabled,
+            "ac_away_enabled": False,
+        },
+    )()
+
+
+def _smart_on_calls(mock_ha) -> list:
+    return [
+        c
+        for c in mock_ha.call_service.await_args_list
+        if c.args[:2] == ("script", "turn_on")
+        and c.args[2].get("entity_id") == ENTITY_AC_SCRIPT_SMART_ON
+    ]
+
+
+def test_ac_mode_auto_invokes_smart_on_when_starting():
     app, settings = _app_with_key()
     with patch("app.routers.ac.HAClient") as mock_cls:
         mock_ha = mock_cls.return_value
         mock_ha.call_service = AsyncMock(return_value=[])
         mock_ha.get_state = AsyncMock(return_value={"state": "auto"})
         with patch("app.routers.ac.fetch_status", new=AsyncMock()) as mock_fetch_status:
-            mock_fetch_status.return_value = type(
-                "S",
-                (),
-                {
-                    "plug": type("P", (), {"power_w": 10.0})(),
-                    "ac_auto_state": type("A", (), {"state": "off"})(),
-                    "ac_auto_enabled": True,
-                    "ac_away_enabled": False,
-                },
-            )()
+            mock_fetch_status.return_value = _status_stub()
             client = TestClient(app)
             resp = client.post(
                 "/api/v1/ac",
@@ -409,12 +429,61 @@ def test_ac_mode_auto_skips_ir_and_sets_input_select():
 
     assert resp.status_code == 200
     assert resp.json()["applied_mode"] == "auto"
-    assert mock_ha.call_service.await_count == 1
-    assert mock_ha.call_service.await_args_list[0].args == (
-        "input_select",
-        "select_option",
-        {"entity_id": ENTITY_AC_MODE, "option": "auto"},
+    assert _smart_on_calls(mock_ha)
+    smart = _smart_on_calls(mock_ha)[0]
+    assert smart.args[2]["variables"] == {"reason": "temp"}
+
+
+def test_ac_mode_auto_skips_smart_on_when_already_running():
+    app, settings = _app_with_key()
+    with patch("app.routers.ac.HAClient") as mock_cls:
+        mock_ha = mock_cls.return_value
+        mock_ha.call_service = AsyncMock(return_value=[])
+        async def _get_state(entity_id: str) -> dict:
+            if entity_id == ENTITY_AC_MODE:
+                return {"state": "auto"}
+            return {"state": "on"}
+
+        mock_ha.get_state = AsyncMock(side_effect=_get_state)
+        with patch("app.routers.ac.fetch_status", new=AsyncMock()) as mock_fetch_status:
+            mock_fetch_status.return_value = _status_stub(auto_state="on")
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/ac",
+                json={"mode": "auto", "operating_mode": "auto"},
+                headers={"X-API-Key": settings.iot_api_key},
+            )
+
+    assert resp.status_code == 200
+    assert not _smart_on_calls(mock_ha)
+
+
+def test_ac_mode_off_uses_turn_off_script():
+    app, settings = _app_with_key()
+    with patch("app.routers.ac.HAClient") as mock_cls:
+        mock_ha = mock_cls.return_value
+        mock_ha.call_service = AsyncMock(return_value=[])
+        mock_ha.get_state = AsyncMock(return_value={"state": "off"})
+        with patch("app.routers.ac.fetch_status", new=AsyncMock()) as mock_fetch_status:
+            mock_fetch_status.return_value = _status_stub()
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/ac",
+                json={"mode": "off"},
+                headers={"X-API-Key": settings.iot_api_key},
+            )
+
+    assert resp.status_code == 200
+    first = mock_ha.call_service.await_args_list[0]
+    assert first.args == (
+        "script",
+        "turn_on",
+        {"entity_id": ENTITY_AC_SCRIPT_TURN_OFF},
     )
+    datetime_calls = [
+        c for c in mock_ha.call_service.await_args_list if c.args[:2] == ("input_datetime", "set_datetime")
+    ]
+    assert not datetime_calls
 
 
 def test_ac_away_enabled_toggle():

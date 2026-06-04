@@ -10,7 +10,6 @@ from fastapi import APIRouter, Header, HTTPException, Response
 from app.constants import (
     AC_COMMAND_COOL_PRESET_17,
     AC_COMMAND_DRY_PRESET_17,
-    AC_COMMAND_OFF,
     AC_REMOTE_DEVICE,
     ENTITY_AC_AWAY_ENABLED,
     ENTITY_AC_AUTO_ENABLED,
@@ -18,6 +17,8 @@ from app.constants import (
     ENTITY_AC_LAST_ON,
     ENTITY_AC_MODE,
     ENTITY_AC_REMOTE,
+    ENTITY_AC_SCRIPT_SMART_ON,
+    ENTITY_AC_SCRIPT_TURN_OFF,
     ENTITY_PLUG_SWITCH,
 )
 from app.deps import ApiKeyDep, SettingsDep
@@ -27,6 +28,7 @@ from app.models.schemas import (
     AcAutoToggleRequest,
     AcAutoToggleResponse,
     AcMode,
+    AcOperatingMode,
     AcStateResponse,
     AcThresholdRule,
     AcThresholdsResponse,
@@ -36,6 +38,7 @@ from app.services.status_service import fetch_status
 from app.services.status_builder import (
     AC_MODES,
     _switch_state,
+    ac_composite_running,
     derive_ac_operating_mode,
     resolve_ac_mutex_toggles,
     resolve_ac_power,
@@ -160,6 +163,54 @@ async def _toggle_ac_away(ha: HAClient, enabled: bool) -> None:
         "input_boolean",
         service,
         {"entity_id": ENTITY_AC_AWAY_ENABLED},
+    )
+
+
+def _ac_is_running_from_status(status: object, *, ac_power_threshold_w: float) -> bool:
+    plug = getattr(status, "plug", None)
+    power_w = getattr(plug, "power_w", None) if plug is not None else None
+    ac_auto_state = getattr(status, "ac_auto_state", None)
+    return ac_composite_running(
+        power_w,
+        ac_power_threshold_w=ac_power_threshold_w,
+        ac_auto_state=ac_auto_state,
+    )
+
+
+def _should_invoke_smart_on(
+    *,
+    mode: AcMode,
+    was_running: bool,
+    auto_toggle: bool | None,
+    operating_mode: AcOperatingMode | None,
+    auto_enabled: bool | None,
+    status_auto_enabled: bool | None,
+) -> bool:
+    if mode != "auto" or was_running:
+        return False
+    if auto_toggle is True or operating_mode == "auto" or auto_enabled is True:
+        return True
+    if auto_toggle is not False and auto_enabled is not False and status_auto_enabled:
+        return True
+    return False
+
+
+async def _invoke_ac_smart_on(ha: HAClient) -> None:
+    await ha.call_service(
+        "script",
+        "turn_on",
+        {
+            "entity_id": ENTITY_AC_SCRIPT_SMART_ON,
+            "variables": {"reason": "temp"},
+        },
+    )
+
+
+async def _invoke_ac_turn_off_script(ha: HAClient) -> None:
+    await ha.call_service(
+        "script",
+        "turn_on",
+        {"entity_id": ENTITY_AC_SCRIPT_TURN_OFF},
     )
 
 
@@ -316,22 +367,47 @@ async def set_ac(
         operating_mode=body.operating_mode,
     )
 
-    if body.mode != "auto":
-        if body.mode == "off":
-            command = AC_COMMAND_OFF
-        elif body.mode == "cool":
-            command = AC_COMMAND_COOL_PRESET_17
-        else:
-            command = AC_COMMAND_DRY_PRESET_17
+    initial_status = await fetch_status(settings)
+    was_running = _ac_is_running_from_status(
+        initial_status,
+        ac_power_threshold_w=settings.ac_power_threshold_w,
+    )
 
-        await ha.call_service(
-            "remote",
-            "send_command",
-            {
-                "entity_id": ENTITY_AC_REMOTE,
-                "device": AC_REMOTE_DEVICE,
-                "command": command,
-            },
+    try:
+        if body.mode == "off":
+            await _invoke_ac_turn_off_script(ha)
+        elif body.mode == "cool":
+            await ha.call_service(
+                "remote",
+                "send_command",
+                {
+                    "entity_id": ENTITY_AC_REMOTE,
+                    "device": AC_REMOTE_DEVICE,
+                    "command": AC_COMMAND_COOL_PRESET_17,
+                },
+            )
+        elif body.mode == "dry":
+            await ha.call_service(
+                "remote",
+                "send_command",
+                {
+                    "entity_id": ENTITY_AC_REMOTE,
+                    "device": AC_REMOTE_DEVICE,
+                    "command": AC_COMMAND_DRY_PRESET_17,
+                },
+            )
+    except Exception as exc:
+        _remember_control(body.mode, "failed")
+        logger.error(
+            "ac primary control failed request_id=%s requested_mode=%s error=%s",
+            request_id,
+            body.mode,
+            exc,
+        )
+        _raise_ac_http_error(
+            request_id=request_id,
+            detail="AC control failed",
+            code="ac_control_failed",
         )
 
     try:
@@ -350,7 +426,7 @@ async def set_ac(
             code="ac_mode_sync_failed",
         )
 
-    if body.mode in {"cool", "dry", "off"}:
+    if body.mode in {"cool", "dry"}:
         try:
             await _sync_ac_last_on_off(ha, body.mode)
         except Exception as exc:
@@ -405,6 +481,29 @@ async def set_ac(
                 request_id=request_id,
                 detail="AC auto toggle failed",
                 code="ac_auto_toggle_failed",
+            )
+
+    if _should_invoke_smart_on(
+        mode=body.mode,
+        was_running=was_running,
+        auto_toggle=auto_toggle,
+        operating_mode=body.operating_mode,
+        auto_enabled=body.auto_enabled,
+        status_auto_enabled=initial_status.ac_auto_enabled,
+    ):
+        try:
+            await _invoke_ac_smart_on(ha)
+        except Exception as exc:
+            _remember_control(body.mode, "failed")
+            logger.error(
+                "ac smart_on failed request_id=%s error=%s",
+                request_id,
+                exc,
+            )
+            _raise_ac_http_error(
+                request_id=request_id,
+                detail="AC smart on failed",
+                code="ac_smart_on_failed",
             )
 
     status = await fetch_status(settings)
@@ -479,6 +578,11 @@ async def set_ac_auto(
 
     ha = HAClient(settings)
     auto_toggle, away_toggle = resolve_ac_mutex_toggles(auto_enabled=body.enabled)
+    initial_status = await fetch_status(settings)
+    was_running = _ac_is_running_from_status(
+        initial_status,
+        ac_power_threshold_w=settings.ac_power_threshold_w,
+    )
     try:
         if away_toggle is not None:
             await _toggle_ac_away(ha, away_toggle)
@@ -487,6 +591,8 @@ async def set_ac_auto(
             enabled=auto_toggle if auto_toggle is not None else body.enabled,
             request_id=request_id,
         )
+        if body.enabled and not was_running:
+            await _invoke_ac_smart_on(ha)
     except HTTPException:
         raise
     except Exception as exc:
