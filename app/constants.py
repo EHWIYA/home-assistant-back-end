@@ -14,6 +14,14 @@ ENTITY_PC_OVERLOAD = "binary_sensor.hwiya_pc_overloaded"
 ENTITY_INDOOR_TEMP = "sensor.hwiya_sensor_temperature"
 ENTITY_INDOOR_HUMIDITY = "sensor.hwiya_sensor_humidity"
 ENTITY_WEATHER = "weather.forecast_jib"
+
+# 실외 날씨 (공공데이터·기상청) — 서울 금천구 가산동
+WEATHER_LOCAL_LAT = 37.4780
+WEATHER_LOCAL_LON = 126.8875
+WEATHER_LOCAL_NX = 58
+WEATHER_LOCAL_NY = 125
+WEATHER_LOCAL_LABEL = "서울 금천구 가산동"
+WEATHER_LOCAL_SHORT_LABEL = "가산동"
 ENTITY_AC_REMOTE = "remote.hwiya_sensor"
 ENTITY_AC_AUTO_ENABLED = "input_boolean.hwiya_ac_auto_enabled"
 ENTITY_AC_AUTO_STATE = "sensor.hwiya_ac_auto_state"

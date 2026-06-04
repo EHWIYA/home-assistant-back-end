@@ -19,6 +19,7 @@ Python 3.11+, FastAPI, httpx, Pydantic v2, uvicorn. 프로덕션 Docker `127.0.0
 |------|------|
 | `app/routers/` | HTTP 입출력만 (얇게) |
 | `app/services/ha_client.py` | HA REST **유일** 진입점 |
+| `app/services/weather_service.py` | 공공데이터 기상청 실외 날씨 (프록시·캐시) |
 | `app/services/status_builder.py` | entity → DTO, 50W 판별, null |
 | `app/constants.py` | `entity_id` 한곳 |
 | `app/models/schemas.py` | 프론트 `types.ts`와 맞는 JSON |
@@ -34,6 +35,7 @@ Python 3.11+, FastAPI, httpx, Pydantic v2, uvicorn. 프로덕션 Docker `127.0.0
 - `GET /health` — 키 없음
 - `GET /api/v1/status`, `POST /api/v1/plug` — 키 필요
 - `GET /api/v1/history/power` — v1.1
+- `GET /api/v1/weather/local` — 공공데이터 기상청 (금천구 가산동, `KMA_SERVICE_KEY`)
 - `POST /api/v1/ac` — `remote.send_command` (`remote.hwiya_sensor`, device `ac`)
 
 ## 변경 시

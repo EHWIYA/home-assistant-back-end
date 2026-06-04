@@ -62,3 +62,13 @@ class ScheduleValidationError(HTTPException):
             status_code=400,
             detail={"detail": detail, "code": "schedule_invalid"},
         )
+
+
+class WeatherUnavailableError(HTTPException):
+    """KMA / public-data weather call failed."""
+
+    def __init__(self, detail: str = "Weather data unavailable"):
+        super().__init__(
+            status_code=503,
+            detail={"detail": detail, "code": "weather_unavailable"},
+        )

@@ -33,9 +33,51 @@ class PcStatus(BaseModel):
 
 
 class WeatherOutdoor(BaseModel):
-    temperature: float | None = None
-    humidity: float | int | None = None
-    condition: str | None = None
+    """HA 실외기/외기 센서 추정 (`weather.forecast_jib`). 기상청 실외 날씨 아님."""
+
+    temperature: float | None = Field(
+        default=None,
+        description="HA weather entity attributes.temperature (°C)",
+    )
+    humidity: float | int | None = Field(
+        default=None,
+        description="HA weather entity attributes.humidity (%)",
+    )
+    condition: str | None = Field(
+        default=None,
+        description="HA attributes.condition 또는 entity state (영문/HA 표기). 홈 실외 날씨용 아님.",
+    )
+
+
+class WeatherLocalResponse(BaseModel):
+    """공공데이터·기상청 기반 실외 날씨 (홈 PWA). HA weather_outdoor 와 별개."""
+
+    location_label: str = Field(
+        examples=["서울 금천구 가산동"],
+        description="UI 전체 지명",
+    )
+    location_short_label: str = Field(
+        examples=["가산동"],
+        description="UI 짧은 표기",
+    )
+    temperature: float = Field(examples=[28.0], description="기온 (°C)")
+    humidity: int = Field(examples=[54], description="습도 (%)")
+    condition: str = Field(examples=["구름많음"], description="한글 날씨 상태")
+    condition_code: str | None = Field(
+        default=None,
+        examples=["3"],
+        description="기상청 SKY(맑음=1) 또는 PTY(강수) 코드",
+    )
+    observed_at: str = Field(
+        examples=["2026-06-04T11:00:00+09:00"],
+        description="관측·발표 기준 시각 (KST ISO8601)",
+    )
+    source: str | None = Field(default="kma", examples=["kma"])
+    source_detail: str | None = Field(
+        default=None,
+        examples=["초단기실황"],
+        description="사용 API (초단기실황, 초단기예보 등)",
+    )
 
 
 class IndoorClimate(BaseModel):
@@ -65,8 +107,17 @@ class StatusResponse(BaseModel):
     ac_mode: AcMode = "off"
     ac_last_run_mode: AcLastRunMode | None = None
     ac_auto_state: AcAutoState | None = None
-    indoor: IndoorClimate | None = None
-    weather_outdoor: WeatherOutdoor | None = None
+    indoor: IndoorClimate | None = Field(
+        default=None,
+        description="Broadlink 실내 센서 (sensor.hwiya_sensor_*)",
+    )
+    weather_outdoor: WeatherOutdoor | None = Field(
+        default=None,
+        description=(
+            "HA `weather.forecast_jib` — 실외기/외기 온습도 추정. "
+            "에어컨 탭용. 기상청 실외 날씨는 GET /api/v1/weather/local."
+        ),
+    )
     updated_at: str
 
 

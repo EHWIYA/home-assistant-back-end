@@ -15,7 +15,7 @@
 ## 역할
 
 - Home Assistant REST만 호출 (`app/services/ha_client.py`)
-- `/health`, `/api/v1/status`, `/api/v1/plug`, `/api/v1/ac`, (v1.1) `/api/v1/history/power`
+- `/health`, `/api/v1/status`, `/api/v1/plug`, `/api/v1/ac`, (v1.1) `/api/v1/history/power`, `/api/v1/weather/local`
 - Docker / GHA → GHCR → NAS 배포 보조
 - SmartThings·DB·LLM·WebSocket v1 비목표
 
@@ -37,6 +37,9 @@
 ```powershell
 # 의존성 + pytest (권장)
 .\.cursor\scripts\dev-test.ps1
+
+# 기상청 실외 날씨 (KMA_SERVICE_KEY 필요)
+.\.cursor\scripts\weather-smoke.ps1
 
 # 서버
 .\.cursor\scripts\ensure-utf8.ps1

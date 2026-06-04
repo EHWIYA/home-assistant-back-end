@@ -3,6 +3,13 @@ from functools import lru_cache
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.constants import (
+    WEATHER_LOCAL_LABEL,
+    WEATHER_LOCAL_NX,
+    WEATHER_LOCAL_NY,
+    WEATHER_LOCAL_SHORT_LABEL,
+)
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -41,6 +48,16 @@ class Settings(BaseSettings):
     hejhome_family_id: int = Field(default=0, alias="HEJHOME_FAMILY_ID")
     hejhome_timeout_seconds: float = Field(default=15.0, alias="HEJHOME_TIMEOUT_SECONDS")
     strip_channel_count: int = Field(default=4, alias="STRIP_CHANNEL_COUNT")
+
+    kma_service_key: str = Field(default="", alias="KMA_SERVICE_KEY")
+    weather_local_nx: int = Field(default=WEATHER_LOCAL_NX, alias="WEATHER_LOCAL_NX")
+    weather_local_ny: int = Field(default=WEATHER_LOCAL_NY, alias="WEATHER_LOCAL_NY")
+    weather_local_label: str = Field(default=WEATHER_LOCAL_LABEL, alias="WEATHER_LOCAL_LABEL")
+    weather_local_short_label: str = Field(
+        default=WEATHER_LOCAL_SHORT_LABEL,
+        alias="WEATHER_LOCAL_SHORT_LABEL",
+    )
+    weather_cache_ttl_seconds: int = Field(default=900, alias="WEATHER_CACHE_TTL_SECONDS")
 
     @property
     def cors_origin_list(self) -> list[str]:
