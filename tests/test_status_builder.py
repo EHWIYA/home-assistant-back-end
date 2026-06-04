@@ -39,11 +39,15 @@ def test_build_status_from_fixture():
     assert status.weather_outdoor is not None
     assert status.weather_outdoor.temperature == 18.2
     assert status.ac_auto_enabled is True
+    assert status.ac_away_enabled is False
+    assert status.ac_mode == "cool"
+    assert status.ac_last_run_mode == "cool"
     assert status.ac_auto_state is not None
     assert status.ac_auto_state.state == "on"
     assert status.ac_auto_state.last_on == "2026-05-26 10:10:00"
     assert status.ac_auto_state.last_off == "2026-05-26 09:30:00"
     assert status.ac_auto_state.last_transition == "2026-05-26 10:10:00"
+    assert status.ac_auto_state.last_run_mode == "cool"
     assert status.indoor is None
     assert status.updated_at.endswith("+09:00") or "+09:" in status.updated_at
 
@@ -180,3 +184,37 @@ def test_ac_auto_state_placeholder_unknown_maps_to_null():
     assert status.ac_auto_state.last_on is None
     assert status.ac_auto_state.last_off is None
     assert status.ac_auto_state.last_transition is None
+
+
+def test_ac_last_run_mode_empty_string_maps_to_null():
+    states = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    states["input_text.hwiya_ac_last_run_mode"] = {
+        "entity_id": "input_text.hwiya_ac_last_run_mode",
+        "state": "",
+        "attributes": {},
+    }
+    states["sensor.hwiya_ac_auto_state"]["attributes"]["last_run_mode"] = "dry"
+    status = _build(states)
+    assert status.ac_last_run_mode is None
+
+
+def test_ac_last_run_mode_prefers_input_text_over_sensor_attr():
+    states = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    states["input_text.hwiya_ac_last_run_mode"]["state"] = "dry"
+    states["sensor.hwiya_ac_auto_state"]["attributes"]["last_run_mode"] = "cool"
+    status = _build(states)
+    assert status.ac_last_run_mode == "dry"
+
+
+def test_ac_mode_auto_from_input_select():
+    states = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    states["input_select.hwiya_ac_mode"]["state"] = "auto"
+    status = _build(states)
+    assert status.ac_mode == "auto"
+
+
+def test_ac_away_enabled_true():
+    states = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    states["input_boolean.hwiya_ac_away_enabled"]["state"] = "on"
+    status = _build(states)
+    assert status.ac_away_enabled is True

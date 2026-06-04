@@ -12,11 +12,12 @@ from app.constants import (
     AC_COMMAND_DRY_PRESET_17,
     AC_COMMAND_OFF,
     AC_REMOTE_DEVICE,
-    ENTITY_AC_MODE,
-    ENTITY_AC_REMOTE,
+    ENTITY_AC_AWAY_ENABLED,
     ENTITY_AC_AUTO_ENABLED,
     ENTITY_AC_LAST_OFF,
     ENTITY_AC_LAST_ON,
+    ENTITY_AC_MODE,
+    ENTITY_AC_REMOTE,
     ENTITY_PLUG_SWITCH,
 )
 from app.deps import ApiKeyDep, SettingsDep
@@ -25,11 +26,12 @@ from app.models.schemas import (
     AcActionResponse,
     AcAutoToggleRequest,
     AcAutoToggleResponse,
+    AcMode,
     AcStateResponse,
 )
 from app.services.ha_client import HAClient
 from app.services.status_service import fetch_status
-from app.services.status_builder import _switch_state, resolve_ac_power
+from app.services.status_builder import AC_MODES, _switch_state, resolve_ac_power
 
 router = APIRouter(prefix="/api/v1", tags=["ac"])
 logger = logging.getLogger(__name__)
@@ -77,15 +79,25 @@ def _is_state_consistent(
     last_control: dict[str, str] | None,
     reconcile_grace_seconds: int,
 ) -> bool:
-    expected_power = "off" if mode == "off" else "on"
+    if mode == "off":
+        expected_power = "off"
+    elif mode == "auto":
+        expected_power = "on" if auto_state == "on" else "off"
+    else:
+        expected_power = "on"
     mode_power_consistent = power == expected_power
 
     auto_mode_consistent = True
     auto_power_consistent = True
     if auto_state in {"on", "off"}:
-        expected_auto = "off" if mode == "off" else "on"
-        auto_mode_consistent = auto_state == expected_auto
-        auto_power_consistent = auto_state == power
+        if mode == "off":
+            auto_mode_consistent = auto_state == "off"
+            auto_power_consistent = auto_state == power
+        elif mode == "auto":
+            auto_power_consistent = auto_state == power
+        else:
+            auto_mode_consistent = auto_state == "on"
+            auto_power_consistent = auto_state == power
 
     if mode_power_consistent and auto_mode_consistent and auto_power_consistent:
         return True
@@ -117,29 +129,100 @@ def _raise_ac_http_error(
     )
 
 
+async def _sync_ac_mode_select(ha: HAClient, mode: AcMode) -> None:
+    await ha.call_service(
+        "input_select",
+        "select_option",
+        {"entity_id": ENTITY_AC_MODE, "option": mode},
+    )
+
+
+async def _sync_ac_last_on_off(ha: HAClient, mode: AcMode) -> None:
+    entity_id = ENTITY_AC_LAST_ON if mode != "off" else ENTITY_AC_LAST_OFF
+    await ha.call_service(
+        "input_datetime",
+        "set_datetime",
+        {"entity_id": entity_id, "datetime": _now_kst_input_datetime()},
+    )
+
+
+async def _toggle_ac_away(ha: HAClient, enabled: bool) -> None:
+    service = "turn_on" if enabled else "turn_off"
+    await ha.call_service(
+        "input_boolean",
+        service,
+        {"entity_id": ENTITY_AC_AWAY_ENABLED},
+    )
+
+
+async def _toggle_ac_auto_enabled(
+    ha: HAClient,
+    *,
+    enabled: bool,
+    request_id: str,
+) -> Literal["on", "off", "unavailable", "unknown"]:
+    auto_service = "turn_on" if enabled else "turn_off"
+    await ha.call_service(
+        "input_boolean",
+        auto_service,
+        {"entity_id": ENTITY_AC_AUTO_ENABLED},
+    )
+
+    if enabled:
+        try:
+            await ha.call_service(
+                "switch",
+                "turn_on",
+                {"entity_id": ENTITY_PLUG_SWITCH},
+            )
+        except Exception as exc:
+            logger.error(
+                "ac auto plug sync failed request_id=%s enabled=%s error=%s",
+                request_id,
+                enabled,
+                exc,
+            )
+            _raise_ac_http_error(
+                request_id=request_id,
+                detail="AC auto toggle succeeded but plug sync failed",
+                code="ac_auto_plug_sync_failed",
+            )
+
+        plug_state = await ha.get_state(ENTITY_PLUG_SWITCH)
+        switch = _switch_state(plug_state.get("state"))
+        if switch != "on":
+            logger.error(
+                "ac auto verify mismatch request_id=%s enabled=%s plug_switch=%s",
+                request_id,
+                enabled,
+                switch,
+            )
+            _raise_ac_http_error(
+                request_id=request_id,
+                detail="AC auto toggle succeeded but plug state mismatch",
+                code="ac_auto_plug_state_mismatch",
+            )
+        return switch
+
+    plug_state = await ha.get_state(ENTITY_PLUG_SWITCH)
+    return _switch_state(plug_state.get("state"))
+
+
 @router.get("/ac/state", response_model=AcStateResponse)
 async def get_ac_state(
     _key: ApiKeyDep,
     settings: SettingsDep,
 ) -> AcStateResponse:
     status = await fetch_status(settings)
-    ha = HAClient(settings)
 
-    mode = "off"
-    try:
-        raw = await ha.get_state(ENTITY_AC_MODE)
-        raw_state = str(raw.get("state") or "").strip().lower()
-        if raw_state in {"off", "cool", "dry"}:
-            mode = raw_state
-    except Exception as exc:
-        logger.warning("failed to fetch ac mode: %s", exc)
-
+    mode = status.ac_mode
     power, running_source = resolve_ac_power(
         status.plug.power_w,
         ac_power_threshold_w=settings.ac_power_threshold_w,
         ac_auto_state=status.ac_auto_state,
     )
     auto_enabled = bool(status.ac_auto_enabled)
+    away_enabled = bool(status.ac_away_enabled)
     auto_state = status.ac_auto_state.state if status.ac_auto_state is not None else None
     last_control = _read_last_control()
     state_consistent = _is_state_consistent(
@@ -157,6 +240,8 @@ async def get_ac_state(
         running_source=running_source,
         mode=mode,
         auto_enabled=auto_enabled,
+        away_enabled=away_enabled,
+        last_run_mode=status.ac_last_run_mode,
         state_consistent=state_consistent,
         state_source=AC_STATE_SOURCE,
         last_control_at=last_control.get("at") if last_control else None,
@@ -177,34 +262,28 @@ async def set_ac(
     request_id = x_request_id or str(uuid4())
     response.headers["X-Request-ID"] = request_id
 
-    if body.mode == "off":
-        command = AC_COMMAND_OFF
-    elif body.mode == "cool":
-        command = AC_COMMAND_COOL_PRESET_17
-    elif body.mode == "dry":
-        command = AC_COMMAND_DRY_PRESET_17
-    else:
-        # Pydantic validation should prevent this, but keep a safe default.
-        command = AC_COMMAND_OFF
-
     ha = HAClient(settings)
-    await ha.call_service(
-        "remote",
-        "send_command",
-        {
-            "entity_id": ENTITY_AC_REMOTE,
-            "device": AC_REMOTE_DEVICE,
-            "command": command,
-        },
-    )
 
-    # Keep HA helper entities in sync with actual control action.
-    try:
+    if body.mode != "auto":
+        if body.mode == "off":
+            command = AC_COMMAND_OFF
+        elif body.mode == "cool":
+            command = AC_COMMAND_COOL_PRESET_17
+        else:
+            command = AC_COMMAND_DRY_PRESET_17
+
         await ha.call_service(
-            "input_select",
-            "select_option",
-            {"entity_id": ENTITY_AC_MODE, "option": body.mode},
+            "remote",
+            "send_command",
+            {
+                "entity_id": ENTITY_AC_REMOTE,
+                "device": AC_REMOTE_DEVICE,
+                "command": command,
+            },
         )
+
+    try:
+        await _sync_ac_mode_select(ha, body.mode)
     except Exception as exc:
         _remember_control(body.mode, "failed")
         logger.error(
@@ -219,33 +298,67 @@ async def set_ac(
             code="ac_mode_sync_failed",
         )
 
-    # Reflect manual control into HA last_on/off timestamps.
-    try:
-        entity_id = ENTITY_AC_LAST_ON if body.mode != "off" else ENTITY_AC_LAST_OFF
-        await ha.call_service(
-            "input_datetime",
-            "set_datetime",
-            {"entity_id": entity_id, "datetime": _now_kst_input_datetime()},
-        )
-    except Exception as exc:
-        _remember_control(body.mode, "failed")
-        logger.error(
-            "ac last_on_off sync failed request_id=%s requested_mode=%s error=%s",
-            request_id,
-            body.mode,
-            exc,
-        )
-        _raise_ac_http_error(
-            request_id=request_id,
-            detail="AC timestamp sync failed",
-            code="ac_timestamp_sync_failed",
-        )
+    if body.mode in {"cool", "dry", "off"}:
+        try:
+            await _sync_ac_last_on_off(ha, body.mode)
+        except Exception as exc:
+            _remember_control(body.mode, "failed")
+            logger.error(
+                "ac last_on_off sync failed request_id=%s requested_mode=%s error=%s",
+                request_id,
+                body.mode,
+                exc,
+            )
+            _raise_ac_http_error(
+                request_id=request_id,
+                detail="AC timestamp sync failed",
+                code="ac_timestamp_sync_failed",
+            )
 
-    # Re-fetch to verify response consistency for frontend state update.
+    if body.away_enabled is not None:
+        try:
+            await _toggle_ac_away(ha, body.away_enabled)
+        except Exception as exc:
+            _remember_control(body.mode, "failed")
+            logger.error(
+                "ac away toggle failed request_id=%s away_enabled=%s error=%s",
+                request_id,
+                body.away_enabled,
+                exc,
+            )
+            _raise_ac_http_error(
+                request_id=request_id,
+                detail="AC away toggle failed",
+                code="ac_away_toggle_failed",
+            )
+
+    if body.auto_enabled is not None:
+        try:
+            await _toggle_ac_auto_enabled(
+                ha,
+                enabled=body.auto_enabled,
+                request_id=request_id,
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            _remember_control(body.mode, "failed")
+            logger.error(
+                "ac auto toggle failed request_id=%s auto_enabled=%s error=%s",
+                request_id,
+                body.auto_enabled,
+                exc,
+            )
+            _raise_ac_http_error(
+                request_id=request_id,
+                detail="AC auto toggle failed",
+                code="ac_auto_toggle_failed",
+            )
+
     status = await fetch_status(settings)
     raw_mode = await ha.get_state(ENTITY_AC_MODE)
     applied_mode = str(raw_mode.get("state") or "").strip().lower()
-    if applied_mode not in {"off", "cool", "dry"}:
+    if applied_mode not in AC_MODES:
         _remember_control(body.mode, "failed")
         logger.error(
             "ac verify failed invalid mode request_id=%s requested_mode=%s applied_mode=%s",
@@ -281,8 +394,10 @@ async def set_ac(
     )
     return AcActionResponse(
         request_id=request_id,
-        applied_mode=applied_mode,
+        applied_mode=applied_mode,  # type: ignore[arg-type]
         power=power,
+        auto_enabled=status.ac_auto_enabled if body.auto_enabled is not None else None,
+        away_enabled=status.ac_away_enabled if body.away_enabled is not None else None,
     )
 
 
@@ -298,14 +413,14 @@ async def set_ac_auto(
     response.headers["X-Request-ID"] = request_id
 
     ha = HAClient(settings)
-    auto_service = "turn_on" if body.enabled else "turn_off"
-
     try:
-        await ha.call_service(
-            "input_boolean",
-            auto_service,
-            {"entity_id": ENTITY_AC_AUTO_ENABLED},
+        switch = await _toggle_ac_auto_enabled(
+            ha,
+            enabled=body.enabled,
+            request_id=request_id,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error(
             "ac auto toggle failed request_id=%s enabled=%s error=%s",
@@ -318,44 +433,6 @@ async def set_ac_auto(
             detail="AC auto toggle failed",
             code="ac_auto_toggle_failed",
         )
-
-    if body.enabled:
-        try:
-            await ha.call_service(
-                "switch",
-                "turn_on",
-                {"entity_id": ENTITY_PLUG_SWITCH},
-            )
-        except Exception as exc:
-            logger.error(
-                "ac auto plug sync failed request_id=%s enabled=%s error=%s",
-                request_id,
-                body.enabled,
-                exc,
-            )
-            _raise_ac_http_error(
-                request_id=request_id,
-                detail="AC auto toggle succeeded but plug sync failed",
-                code="ac_auto_plug_sync_failed",
-            )
-
-        plug_state = await ha.get_state(ENTITY_PLUG_SWITCH)
-        switch = _switch_state(plug_state.get("state"))
-        if switch != "on":
-            logger.error(
-                "ac auto verify mismatch request_id=%s enabled=%s plug_switch=%s",
-                request_id,
-                body.enabled,
-                switch,
-            )
-            _raise_ac_http_error(
-                request_id=request_id,
-                detail="AC auto toggle succeeded but plug state mismatch",
-                code="ac_auto_plug_state_mismatch",
-            )
-    else:
-        plug_state = await ha.get_state(ENTITY_PLUG_SWITCH)
-        switch = _switch_state(plug_state.get("state"))
 
     return AcAutoToggleResponse(
         request_id=request_id,

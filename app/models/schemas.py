@@ -2,6 +2,9 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+AcMode = Literal["off", "auto", "cool", "dry"]
+AcLastRunMode = Literal["cool", "dry"]
+
 
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
@@ -45,6 +48,7 @@ class AcAutoState(BaseModel):
     last_on: str | None = None
     last_off: str | None = None
     last_transition: str | None = None
+    last_run_mode: AcLastRunMode | None = None
 
 
 class ElectricityInfo(BaseModel):
@@ -57,6 +61,9 @@ class StatusResponse(BaseModel):
     electricity: ElectricityInfo
     ac_estimated_running: bool
     ac_auto_enabled: bool | None = None
+    ac_away_enabled: bool | None = None
+    ac_mode: AcMode = "off"
+    ac_last_run_mode: AcLastRunMode | None = None
     ac_auto_state: AcAutoState | None = None
     indoor: IndoorClimate | None = None
     weather_outdoor: WeatherOutdoor | None = None
@@ -82,14 +89,18 @@ class PcActionResponse(BaseModel):
 
 
 class AcActionRequest(BaseModel):
-    mode: Literal["off", "cool", "dry"]
+    mode: AcMode
+    auto_enabled: bool | None = None
+    away_enabled: bool | None = None
 
 
 class AcActionResponse(BaseModel):
     ok: bool = True
     request_id: str | None = None
-    applied_mode: Literal["off", "cool", "dry"] | None = None
+    applied_mode: AcMode | None = None
     power: Literal["on", "off"] | None = None
+    auto_enabled: bool | None = None
+    away_enabled: bool | None = None
 
 
 class AcAutoToggleRequest(BaseModel):
@@ -106,8 +117,10 @@ class AcAutoToggleResponse(BaseModel):
 class AcStateResponse(BaseModel):
     power: Literal["on", "off"]
     running_source: Literal["plug", "logical"]
-    mode: Literal["off", "cool", "dry"]
+    mode: AcMode
     auto_enabled: bool
+    away_enabled: bool
+    last_run_mode: AcLastRunMode | None = None
     state_consistent: bool
     state_source: str
     last_control_at: str | None = None

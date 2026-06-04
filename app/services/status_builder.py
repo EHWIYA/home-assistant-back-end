@@ -10,6 +10,9 @@ from app.constants import (
     ENTITY_INDOOR_TEMP,
     ENTITY_AC_AUTO_ENABLED,
     ENTITY_AC_AUTO_STATE,
+    ENTITY_AC_AWAY_ENABLED,
+    ENTITY_AC_LAST_RUN_MODE,
+    ENTITY_AC_MODE,
     ENTITY_PC_CLOUD,
     ENTITY_PC_ENERGY_MONTH,
     ENTITY_PC_ENERGY_TODAY,
@@ -25,6 +28,8 @@ from app.constants import (
 )
 from app.models.schemas import (
     AcAutoState,
+    AcLastRunMode,
+    AcMode,
     ElectricityInfo,
     IndoorClimate,
     PcStatus,
@@ -38,6 +43,8 @@ KST = ZoneInfo("Asia/Seoul")
 SwitchState = Literal["on", "off", "unavailable", "unknown"]
 AcPowerSource = Literal["plug", "logical"]
 AcPowerDisplay = Literal["on", "off"]
+AC_MODES: frozenset[str] = frozenset({"off", "auto", "cool", "dry"})
+AC_LAST_RUN_MODES: frozenset[str] = frozenset({"cool", "dry"})
 
 
 def _now_kst_iso() -> str:
@@ -174,6 +181,49 @@ def _build_ac_auto_enabled(states: dict[str, dict[str, Any]]) -> bool | None:
     return None
 
 
+def _build_ac_away_enabled(states: dict[str, dict[str, Any]]) -> bool | None:
+    raw = states.get(ENTITY_AC_AWAY_ENABLED)
+    if not raw:
+        return None
+    state = str(raw.get("state") or "").strip().lower()
+    if state == "on":
+        return True
+    if state == "off":
+        return False
+    return None
+
+
+def parse_ac_mode(raw: dict[str, Any] | None) -> AcMode:
+    if not raw:
+        return "off"
+    state = str(raw.get("state") or "").strip().lower()
+    if state in AC_MODES:
+        return state  # type: ignore[return-value]
+    return "off"
+
+
+def parse_ac_last_run_mode(value: Any) -> AcLastRunMode | None:
+    s = str(value or "").strip().lower()
+    if s in AC_LAST_RUN_MODES:
+        return s  # type: ignore[return-value]
+    return None
+
+
+def _build_ac_mode(states: dict[str, dict[str, Any]]) -> AcMode:
+    return parse_ac_mode(states.get(ENTITY_AC_MODE))
+
+
+def _build_ac_last_run_mode(states: dict[str, dict[str, Any]]) -> AcLastRunMode | None:
+    raw = states.get(ENTITY_AC_LAST_RUN_MODE)
+    if raw is not None:
+        return parse_ac_last_run_mode(raw.get("state"))
+    auto_raw = states.get(ENTITY_AC_AUTO_STATE)
+    if auto_raw:
+        attrs = auto_raw.get("attributes") or {}
+        return parse_ac_last_run_mode(attrs.get("last_run_mode"))
+    return None
+
+
 def ac_plug_running(power_w: float | None, *, ac_power_threshold_w: float) -> bool:
     return power_w is not None and power_w >= ac_power_threshold_w
 
@@ -206,7 +256,11 @@ def resolve_ac_power(
     return "off", "plug"
 
 
-def _build_ac_auto_state(states: dict[str, dict[str, Any]]) -> AcAutoState | None:
+def _build_ac_auto_state(
+    states: dict[str, dict[str, Any]],
+    *,
+    last_run_mode: AcLastRunMode | None = None,
+) -> AcAutoState | None:
     raw = states.get(ENTITY_AC_AUTO_STATE)
     if not raw:
         return None
@@ -214,11 +268,13 @@ def _build_ac_auto_state(states: dict[str, dict[str, Any]]) -> AcAutoState | Non
     if state not in ("on", "off", "unknown", "unavailable"):
         state = "unknown"
     attrs = raw.get("attributes") or {}
+    mirrored_last_run_mode = parse_ac_last_run_mode(attrs.get("last_run_mode"))
     return AcAutoState(
         state=state,  # type: ignore[arg-type]
         last_on=_ac_auto_timestamp(attrs.get("last_on")),
         last_off=_ac_auto_timestamp(attrs.get("last_off")),
         last_transition=_ac_auto_timestamp(attrs.get("last_transition")),
+        last_run_mode=last_run_mode if last_run_mode is not None else mirrored_last_run_mode,
     )
 
 
@@ -238,7 +294,7 @@ def build_status_from_states(
     power_w = _parse_float(plug_power_raw.get("state"))
     energy_kwh = _parse_float(plug_energy_raw.get("state"))
 
-    ac_auto_state = _build_ac_auto_state(states)
+    ac_auto_state = _build_ac_auto_state(states, last_run_mode=_build_ac_last_run_mode(states))
     ac_running = ac_composite_running(
         power_w,
         ac_power_threshold_w=ac_power_threshold_w,
@@ -269,6 +325,9 @@ def build_status_from_states(
         electricity=ElectricityInfo(rate_won_per_kwh=estimate_rate_won_per_kwh),
         ac_estimated_running=ac_running,
         ac_auto_enabled=_build_ac_auto_enabled(states),
+        ac_away_enabled=_build_ac_away_enabled(states),
+        ac_mode=_build_ac_mode(states),
+        ac_last_run_mode=_build_ac_last_run_mode(states),
         ac_auto_state=ac_auto_state,
         indoor=_build_indoor(states),
         weather_outdoor=weather,

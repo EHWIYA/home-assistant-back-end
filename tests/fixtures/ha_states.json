@@ -77,7 +77,23 @@
     "attributes": {
       "last_on": "2026-05-26 10:10:00",
       "last_off": "2026-05-26 09:30:00",
-      "last_transition": "2026-05-26 10:10:00"
+      "last_transition": "2026-05-26 10:10:00",
+      "last_run_mode": "cool"
     }
+  },
+  "input_select.hwiya_ac_mode": {
+    "entity_id": "input_select.hwiya_ac_mode",
+    "state": "cool",
+    "attributes": {}
+  },
+  "input_boolean.hwiya_ac_away_enabled": {
+    "entity_id": "input_boolean.hwiya_ac_away_enabled",
+    "state": "off",
+    "attributes": {}
+  },
+  "input_text.hwiya_ac_last_run_mode": {
+    "entity_id": "input_text.hwiya_ac_last_run_mode",
+    "state": "cool",
+    "attributes": {}
   }
 }

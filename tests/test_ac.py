@@ -6,6 +6,7 @@ from app.config import Settings, get_settings
 from app.constants import (
     AC_COMMAND_COOL_PRESET_17,
     AC_REMOTE_DEVICE,
+    ENTITY_AC_AWAY_ENABLED,
     ENTITY_AC_LAST_ON,
     ENTITY_AC_MODE,
     ENTITY_AC_REMOTE,
@@ -50,6 +51,8 @@ def test_ac_returns_verified_state_and_request_id():
                 {
                     "plug": type("P", (), {"power_w": 742.0})(),
                     "ac_auto_state": None,
+                    "ac_auto_enabled": False,
+                    "ac_away_enabled": False,
                 },
             )()
             client = TestClient(app)
@@ -66,6 +69,8 @@ def test_ac_returns_verified_state_and_request_id():
         "request_id": "req-123",
         "applied_mode": "cool",
         "power": "on",
+        "auto_enabled": None,
+        "away_enabled": None,
     }
     assert mock_ha.call_service.await_count == 3
     first = mock_ha.call_service.await_args_list[0]
@@ -144,6 +149,9 @@ def test_ac_state_includes_consistency_metadata():
                     "plug": type("P", (), {"power_w": 10.0})(),
                     "ac_estimated_running": False,
                     "ac_auto_enabled": True,
+                    "ac_away_enabled": False,
+                    "ac_mode": "cool",
+                    "ac_last_run_mode": "cool",
                     "ac_auto_state": type("A", (), {"state": "on"})(),
                     "indoor": None,
                 },
@@ -159,6 +167,8 @@ def test_ac_state_includes_consistency_metadata():
     payload = resp.json()
     assert payload["mode"] == "cool"
     assert payload["power"] == "on"
+    assert payload["away_enabled"] is False
+    assert payload["last_run_mode"] == "cool"
     assert payload["running_source"] == "logical"
     assert payload["state_consistent"] is True
     assert payload["state_source"] == "composed(plug_w,ac_auto_state,ha_input_select)"
@@ -259,3 +269,71 @@ def test_ac_auto_returns_502_when_plug_state_mismatch():
     assert resp.status_code == 502
     payload = resp.json()
     assert payload["detail"]["code"] == "ac_auto_plug_state_mismatch"
+
+
+def test_ac_mode_auto_skips_ir_and_sets_input_select():
+    app, settings = _app_with_key()
+    with patch("app.routers.ac.HAClient") as mock_cls:
+        mock_ha = mock_cls.return_value
+        mock_ha.call_service = AsyncMock(return_value=[])
+        mock_ha.get_state = AsyncMock(return_value={"state": "auto"})
+        with patch("app.routers.ac.fetch_status", new=AsyncMock()) as mock_fetch_status:
+            mock_fetch_status.return_value = type(
+                "S",
+                (),
+                {
+                    "plug": type("P", (), {"power_w": 10.0})(),
+                    "ac_auto_state": type("A", (), {"state": "off"})(),
+                    "ac_auto_enabled": True,
+                    "ac_away_enabled": False,
+                },
+            )()
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/ac",
+                json={"mode": "auto"},
+                headers={"X-API-Key": settings.iot_api_key},
+            )
+
+    assert resp.status_code == 200
+    assert resp.json()["applied_mode"] == "auto"
+    assert mock_ha.call_service.await_count == 1
+    assert mock_ha.call_service.await_args_list[0].args == (
+        "input_select",
+        "select_option",
+        {"entity_id": ENTITY_AC_MODE, "option": "auto"},
+    )
+
+
+def test_ac_away_enabled_toggle():
+    app, settings = _app_with_key()
+    with patch("app.routers.ac.HAClient") as mock_cls:
+        mock_ha = mock_cls.return_value
+        mock_ha.call_service = AsyncMock(return_value=[])
+        mock_ha.get_state = AsyncMock(return_value={"state": "cool"})
+        with patch("app.routers.ac.fetch_status", new=AsyncMock()) as mock_fetch_status:
+            mock_fetch_status.return_value = type(
+                "S",
+                (),
+                {
+                    "plug": type("P", (), {"power_w": 742.0})(),
+                    "ac_auto_state": None,
+                    "ac_auto_enabled": False,
+                    "ac_away_enabled": True,
+                },
+            )()
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/ac",
+                json={"mode": "cool", "away_enabled": True},
+                headers={"X-API-Key": settings.iot_api_key},
+            )
+
+    assert resp.status_code == 200
+    assert resp.json()["away_enabled"] is True
+    away_call = mock_ha.call_service.await_args_list[3]
+    assert away_call.args == (
+        "input_boolean",
+        "turn_on",
+        {"entity_id": ENTITY_AC_AWAY_ENABLED},
+    )
