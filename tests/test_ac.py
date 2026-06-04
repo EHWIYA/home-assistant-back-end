@@ -277,8 +277,17 @@ def test_ac_thresholds_endpoint():
     assert "v3.0" in data["home_auto"]["notes"]
     assert "input_select=off" in data["home_auto"]["notes"]
     assert "v3.0" in data["mutex"]
-    assert "≥26°C" in data["away"]["on"]
+    assert "27°C" in data["away"]["on"]
+    assert "60%" in data["away"]["on"]
+    assert "10분" in data["away"]["on"]
+    assert "26°C" in data["away"]["on"]
     assert "스마트 ON" in data["away"]["on"]
+    assert "냉방" in data["away"]["on"]
+    assert "제습" in data["away"]["on"]
+    assert "27°C" in data["away"]["off"]
+    assert "60%" in data["away"]["off"]
+    assert data["away"]["on"] != data["home_auto"]["on"]
+    assert data["away"]["off"] != data["home_auto"]["off"]
     assert "home_auto" in data
     assert "away" in data
 

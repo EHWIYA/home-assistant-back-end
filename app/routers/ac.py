@@ -292,10 +292,10 @@ async def get_ac_thresholds(_key: ApiKeyDep) -> AcThresholdsResponse:
         ),
         away=AcThresholdRule(
             on=(
-                "실내 ≥26°C(15분, OFF 후 재가동); "
-                f"{_SMART_ON_NOTE}"
+                "실내 27°C 이상 즉시, 또는 습도 60% 이상 10분(실내 26°C 이상); "
+                "스마트 ON(모드 auto): 26°C 초과 냉방, 26°C 이하 제습"
             ),
-            off="온도 <24°C 또는 (습도 OFF·온 <26°C)",
+            off="실내 27°C 미만이고 습도 60% 미만",
             notes=(
                 "외출 모드(input_boolean.hwiya_ac_away_enabled ON) 시 HA automation v3.0 적용; "
                 "input_select=off일 때만 auto·away OFF(cool/dry 시 auto 유지); "
