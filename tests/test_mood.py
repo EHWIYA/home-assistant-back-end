@@ -11,14 +11,15 @@ from app.services.mood_client import MoodClient, build_command, clear_integratio
 
 
 def _app_with_key(**settings_overrides) -> tuple:
-    settings = Settings(
-        ha_base_url="http://127.0.0.1:8123",
-        ha_token="test-token",
-        iot_api_key="test-key",
-        mood_gh_room="자취방",
-        mood_gh_device="무드등",
-        **settings_overrides,
-    )
+    defaults = {
+        "ha_base_url": "http://127.0.0.1:8123",
+        "ha_token": "test-token",
+        "iot_api_key": "test-key",
+        "mood_gh_room": "자취방",
+        "mood_gh_device": "무드등",
+        "mood_light_entity_id": "",
+    }
+    settings = Settings(**{**defaults, **settings_overrides})
     app = create_app()
     get_settings.cache_clear()
     app.dependency_overrides[get_settings] = lambda: settings
