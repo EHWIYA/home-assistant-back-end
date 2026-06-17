@@ -4,7 +4,9 @@ from pathlib import Path
 from app.services.status_builder import (
     build_status_from_states,
     derive_ac_operating_mode,
+    is_ac_automation_blocked,
     resolve_ac_mutex_toggles,
+    resolve_ha_ac_mode,
 )
 
 FIXTURE = Path(__file__).parent / "fixtures" / "ha_states.json"
@@ -236,6 +238,42 @@ def test_resolve_ac_mutex_both_true_prefers_away():
 
 def test_resolve_ac_mutex_operating_mode_auto():
     assert resolve_ac_mutex_toggles(operating_mode="auto") == (True, False)
+
+
+def test_resolve_ha_ac_mode_off_with_operating_mode_auto():
+    assert resolve_ha_ac_mode(mode="off", operating_mode="auto") == "auto"
+
+
+def test_resolve_ha_ac_mode_off_with_operating_mode_away():
+    assert resolve_ha_ac_mode(mode="off", operating_mode="away") == "auto"
+
+
+def test_resolve_ha_ac_mode_off_with_auto_toggle():
+    assert resolve_ha_ac_mode(mode="off", auto_toggle=True) == "auto"
+
+
+def test_resolve_ha_ac_mode_off_manual_stays_off():
+    assert resolve_ha_ac_mode(mode="off", operating_mode="manual") == "off"
+
+
+def test_resolve_ha_ac_mode_cool_unchanged():
+    assert resolve_ha_ac_mode(mode="cool", operating_mode="auto") == "cool"
+
+
+def test_is_ac_automation_blocked_when_auto_on_and_mode_off():
+    assert is_ac_automation_blocked(mode="off", auto_enabled=True, away_enabled=False) is True
+
+
+def test_is_ac_automation_blocked_when_away_on_and_mode_off():
+    assert is_ac_automation_blocked(mode="off", auto_enabled=False, away_enabled=True) is True
+
+
+def test_is_ac_automation_blocked_false_when_mode_auto():
+    assert is_ac_automation_blocked(mode="auto", auto_enabled=True, away_enabled=False) is False
+
+
+def test_is_ac_automation_blocked_false_when_manual_off():
+    assert is_ac_automation_blocked(mode="off", auto_enabled=False, away_enabled=False) is False
 
 
 def test_ac_operating_mode_manual():

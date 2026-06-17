@@ -318,7 +318,8 @@ def test_ac_auto_on_toggles_auto_and_plug():
     away_off = mock_ha.call_service.await_args_list[0]
     auto_on = mock_ha.call_service.await_args_list[1]
     plug_on = mock_ha.call_service.await_args_list[2]
-    smart_on = mock_ha.call_service.await_args_list[3]
+    mode_sync = mock_ha.call_service.await_args_list[3]
+    smart_on = mock_ha.call_service.await_args_list[4]
     assert away_off.args == (
         "input_boolean",
         "turn_off",
@@ -333,6 +334,11 @@ def test_ac_auto_on_toggles_auto_and_plug():
         "switch",
         "turn_on",
         {"entity_id": ENTITY_PLUG_SWITCH},
+    )
+    assert mode_sync.args == (
+        "input_select",
+        "select_option",
+        {"entity_id": ENTITY_AC_MODE, "option": "auto"},
     )
     assert smart_on.args[:2] == ("script", "turn_on")
     assert smart_on.args[2]["entity_id"] == ENTITY_AC_SCRIPT_SMART_ON
@@ -532,3 +538,73 @@ def test_ac_away_enabled_toggle():
         "turn_on",
         {"entity_id": ENTITY_AC_AWAY_ENABLED},
     )
+
+
+def test_ac_post_operating_mode_auto_with_mode_off_corrects_ha_mode():
+    app, settings = _app_with_key()
+    with patch("app.routers.ac.HAClient") as mock_cls:
+        mock_ha = mock_cls.return_value
+        mock_ha.call_service = AsyncMock(return_value=[])
+
+        async def _get_state(entity_id: str) -> dict:
+            if entity_id == ENTITY_AC_MODE:
+                return {"state": "auto"}
+            return {"state": "on"}
+
+        mock_ha.get_state = AsyncMock(side_effect=_get_state)
+        with patch("app.routers.ac.fetch_status", new=AsyncMock()) as mock_fetch_status:
+            mock_fetch_status.return_value = _status_stub()
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/ac",
+                json={"mode": "off", "operating_mode": "auto"},
+                headers={"X-API-Key": settings.iot_api_key},
+            )
+
+    assert resp.status_code == 200
+    assert resp.json()["applied_mode"] == "auto"
+    turn_off_calls = [
+        c
+        for c in mock_ha.call_service.await_args_list
+        if c.args[:2] == ("script", "turn_on")
+        and c.args[2].get("entity_id") == ENTITY_AC_SCRIPT_TURN_OFF
+    ]
+    assert not turn_off_calls
+    mode_sync = [
+        c
+        for c in mock_ha.call_service.await_args_list
+        if c.args[:2] == ("input_select", "select_option")
+        and c.args[2].get("option") == "auto"
+    ]
+    assert mode_sync
+    assert _smart_on_calls(mock_ha)
+
+
+def test_ac_state_inconsistent_when_automation_blocked():
+    app, settings = _app_with_key()
+    with patch("app.routers.ac.fetch_status", new=AsyncMock()) as mock_fetch_status:
+        mock_fetch_status.return_value = type(
+            "S",
+            (),
+            {
+                "plug": type("P", (), {"power_w": 10.0})(),
+                "ac_auto_enabled": True,
+                "ac_away_enabled": False,
+                "ac_mode": "off",
+                "ac_last_run_mode": None,
+                "ac_auto_state": type("A", (), {"state": "off"})(),
+                "indoor": None,
+            },
+        )()
+        with patch("app.routers.ac._read_last_control", return_value=None):
+            client = TestClient(app)
+            resp = client.get(
+                "/api/v1/ac/state",
+                headers={"X-API-Key": settings.iot_api_key},
+            )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["mode"] == "off"
+    assert payload["operating_mode"] == "auto"
+    assert payload["state_consistent"] is False

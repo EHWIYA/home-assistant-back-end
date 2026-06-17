@@ -40,8 +40,10 @@ from app.services.status_builder import (
     _switch_state,
     ac_composite_running,
     derive_ac_operating_mode,
+    is_ac_automation_blocked,
     resolve_ac_mutex_toggles,
     resolve_ac_power,
+    resolve_ha_ac_mode,
 )
 
 router = APIRouter(prefix="/api/v1", tags=["ac"])
@@ -87,9 +89,18 @@ def _is_state_consistent(
     power: str,
     mode: str,
     auto_state: str | None,
+    auto_enabled: bool,
+    away_enabled: bool,
     last_control: dict[str, str] | None,
     reconcile_grace_seconds: int,
 ) -> bool:
+    if is_ac_automation_blocked(
+        mode=mode,  # type: ignore[arg-type]
+        auto_enabled=auto_enabled,
+        away_enabled=away_enabled,
+    ):
+        return False
+
     if mode == "off":
         expected_power = "off"
     elif mode == "auto":
@@ -330,6 +341,8 @@ async def get_ac_state(
         power=power,
         mode=mode,
         auto_state=auto_state,
+        auto_enabled=auto_enabled,
+        away_enabled=away_enabled,
         last_control=last_control,
         reconcile_grace_seconds=settings.ac_state_reconcile_grace_seconds,
     )
@@ -374,6 +387,12 @@ async def set_ac(
         away_enabled=body.away_enabled,
         operating_mode=body.operating_mode,
     )
+    ha_mode = resolve_ha_ac_mode(
+        mode=body.mode,
+        operating_mode=body.operating_mode,
+        auto_toggle=auto_toggle,
+        away_toggle=away_toggle,
+    )
 
     initial_status = await fetch_status(settings)
     was_running = _ac_is_running_from_status(
@@ -382,7 +401,7 @@ async def set_ac(
     )
 
     try:
-        if body.mode == "off":
+        if body.mode == "off" and ha_mode == "off":
             await _invoke_ac_turn_off_script(ha)
         elif body.mode == "cool":
             await ha.call_service(
@@ -405,11 +424,12 @@ async def set_ac(
                 },
             )
     except Exception as exc:
-        _remember_control(body.mode, "failed")
+        _remember_control(ha_mode, "failed")
         logger.error(
-            "ac primary control failed request_id=%s requested_mode=%s error=%s",
+            "ac primary control failed request_id=%s requested_mode=%s ha_mode=%s error=%s",
             request_id,
             body.mode,
+            ha_mode,
             exc,
         )
         _raise_ac_http_error(
@@ -419,13 +439,14 @@ async def set_ac(
         )
 
     try:
-        await _sync_ac_mode_select(ha, body.mode)
+        await _sync_ac_mode_select(ha, ha_mode)
     except Exception as exc:
-        _remember_control(body.mode, "failed")
+        _remember_control(ha_mode, "failed")
         logger.error(
-            "ac mode sync failed request_id=%s requested_mode=%s error=%s",
+            "ac mode sync failed request_id=%s requested_mode=%s ha_mode=%s error=%s",
             request_id,
             body.mode,
+            ha_mode,
             exc,
         )
         _raise_ac_http_error(
@@ -434,15 +455,15 @@ async def set_ac(
             code="ac_mode_sync_failed",
         )
 
-    if body.mode in {"cool", "dry"}:
+    if ha_mode in {"cool", "dry"}:
         try:
-            await _sync_ac_last_on_off(ha, body.mode)
+            await _sync_ac_last_on_off(ha, ha_mode)
         except Exception as exc:
-            _remember_control(body.mode, "failed")
+            _remember_control(ha_mode, "failed")
             logger.error(
-                "ac last_on_off sync failed request_id=%s requested_mode=%s error=%s",
+                "ac last_on_off sync failed request_id=%s ha_mode=%s error=%s",
                 request_id,
-                body.mode,
+                ha_mode,
                 exc,
             )
             _raise_ac_http_error(
@@ -455,7 +476,7 @@ async def set_ac(
         try:
             await _toggle_ac_away(ha, away_toggle)
         except Exception as exc:
-            _remember_control(body.mode, "failed")
+            _remember_control(ha_mode, "failed")
             logger.error(
                 "ac away toggle failed request_id=%s away_enabled=%s error=%s",
                 request_id,
@@ -478,7 +499,7 @@ async def set_ac(
         except HTTPException:
             raise
         except Exception as exc:
-            _remember_control(body.mode, "failed")
+            _remember_control(ha_mode, "failed")
             logger.error(
                 "ac auto toggle failed request_id=%s auto_enabled=%s error=%s",
                 request_id,
@@ -492,7 +513,7 @@ async def set_ac(
             )
 
     if _should_invoke_smart_on(
-        mode=body.mode,
+        mode=ha_mode,
         was_running=was_running,
         auto_toggle=auto_toggle,
         operating_mode=body.operating_mode,
@@ -502,7 +523,7 @@ async def set_ac(
         try:
             await _invoke_ac_smart_on(ha)
         except Exception as exc:
-            _remember_control(body.mode, "failed")
+            _remember_control(ha_mode, "failed")
             logger.error(
                 "ac smart_on failed request_id=%s error=%s",
                 request_id,
@@ -518,11 +539,11 @@ async def set_ac(
     raw_mode = await ha.get_state(ENTITY_AC_MODE)
     applied_mode = str(raw_mode.get("state") or "").strip().lower()
     if applied_mode not in AC_MODES:
-        _remember_control(body.mode, "failed")
+        _remember_control(ha_mode, "failed")
         logger.error(
-            "ac verify failed invalid mode request_id=%s requested_mode=%s applied_mode=%s",
+            "ac verify failed invalid mode request_id=%s ha_mode=%s applied_mode=%s",
             request_id,
-            body.mode,
+            ha_mode,
             applied_mode,
         )
         _raise_ac_http_error(
@@ -531,12 +552,12 @@ async def set_ac(
             code="ac_verify_failed",
         )
 
-    if applied_mode != body.mode:
-        _remember_control(body.mode, "failed")
+    if applied_mode != ha_mode:
+        _remember_control(ha_mode, "failed")
         logger.error(
-            "ac verify mismatch request_id=%s requested_mode=%s applied_mode=%s",
+            "ac verify mismatch request_id=%s ha_mode=%s applied_mode=%s",
             request_id,
-            body.mode,
+            ha_mode,
             applied_mode,
         )
         _raise_ac_http_error(
@@ -599,6 +620,8 @@ async def set_ac_auto(
             enabled=auto_toggle if auto_toggle is not None else body.enabled,
             request_id=request_id,
         )
+        if body.enabled:
+            await _sync_ac_mode_select(ha, "auto")
         if body.enabled and not was_running:
             await _invoke_ac_smart_on(ha)
     except HTTPException:

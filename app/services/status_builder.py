@@ -210,6 +210,39 @@ def derive_ac_operating_mode(
     return None
 
 
+def resolve_ha_ac_mode(
+    *,
+    mode: AcMode,
+    operating_mode: AcOperatingMode | None = None,
+    auto_toggle: bool | None = None,
+    away_toggle: bool | None = None,
+) -> AcMode:
+    """Map API request mode to HA ``input_select`` value.
+
+    When automation (auto/away) is being enabled but ``mode=off`` was sent,
+    keep ``input_select`` at ``auto`` so HA ON/re-ON automations are not blocked.
+    """
+    if mode != "off":
+        return mode
+    if operating_mode in ("auto", "away"):
+        return "auto"
+    if auto_toggle is True or away_toggle is True:
+        return "auto"
+    return "off"
+
+
+def is_ac_automation_blocked(
+    *,
+    mode: AcMode,
+    auto_enabled: bool | None,
+    away_enabled: bool | None,
+) -> bool:
+    """``auto_enabled``/``away_enabled`` ON while ``input_select=off`` blocks HA automations."""
+    if mode != "off":
+        return False
+    return auto_enabled is True or away_enabled is True
+
+
 def resolve_ac_mutex_toggles(
     *,
     auto_enabled: bool | None = None,
