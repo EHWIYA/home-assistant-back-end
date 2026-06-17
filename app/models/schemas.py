@@ -399,6 +399,16 @@ class MoodColorTemperatureRequest(BaseModel):
     mode: MoodColorTemperatureMode
 
 
+class MoodColorHsRequest(BaseModel):
+    hue: float = Field(ge=0, le=360, description="색상 0–360°")
+    saturation: float = Field(ge=0, le=100, description="채도 0–100%")
+
+
+class MoodHsRange(BaseModel):
+    hue: list[int] = Field(default_factory=lambda: [0, 360])
+    saturation: list[int] = Field(default_factory=lambda: [0, 100])
+
+
 class MoodCommandRequest(BaseModel):
     command: str = Field(min_length=1, description="한국어 전체 음성 명령 (escape hatch)")
 
@@ -414,8 +424,13 @@ class MoodCapabilitiesResponse(BaseModel):
     colors: list[str]
     brightness_range: list[int] = Field(default_factory=lambda: [1, 100])
     color_modes: list[str] = Field(default_factory=lambda: ["named"])
+    color_mode: str | None = None
+    hs_range: MoodHsRange | None = None
+    rgb_range: list[int] | None = None
+    color_temperature: bool | None = None
     supports_rgb: bool = False
     supports_hex: bool = False
+    supports_hs: bool = False
     supports_state: bool = False
 
 
@@ -433,5 +448,6 @@ class MoodStateResponse(BaseModel):
     brightness: int | None = None
     color: str | None = None
     rgb: list[int] | None = None
+    hs: list[float] | None = None
     state_readable: bool = False
     note: str | None = "Google Home 경유 — 상태 읽기 미지원"

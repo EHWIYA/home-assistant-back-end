@@ -8,6 +8,7 @@ from app.deps import verify_api_key
 from app.exceptions import MoodError
 from app.main import create_app
 from app.services.mood_client import MoodClient, build_command, clear_integration_cache
+from app.services.mood_color import rgb_to_hs
 
 
 def _app_with_key(**settings_overrides) -> tuple:
@@ -50,20 +51,31 @@ def test_mood_capabilities_google_home_only():
     data = resp.json()
     assert "power" in data["actions"]
     assert "color-rgb" not in data["actions"]
+    assert "color-hs" not in data["actions"]
     assert data["color_modes"] == ["named"]
+    assert data["color_mode"] is None
+    assert data["hs_range"] is None
+    assert data["color_temperature"] is None
     assert data["supports_rgb"] is False
+    assert data["supports_hs"] is False
     assert data["supports_hex"] is False
     assert data["supports_state"] is False
 
 
 def test_mood_capabilities_ha_direct():
-    app, _ = _app_with_key(mood_light_entity_id="light.jacwibang_mood")
+    app, _ = _app_with_key(mood_light_entity_id="light.mudeudeung")
     client = TestClient(app)
     resp = client.get("/api/v1/mood/capabilities", headers={"X-API-Key": "test-key"})
     data = resp.json()
     assert "color-rgb" in data["actions"]
-    assert data["color_modes"] == ["named", "rgb"]
+    assert "color-hs" in data["actions"]
+    assert data["color_modes"] == ["named", "hs"]
+    assert data["color_mode"] == "hs"
+    assert data["hs_range"] == {"hue": [0, 360], "saturation": [0, 100]}
+    assert data["rgb_range"] == [0, 255]
+    assert data["color_temperature"] is False
     assert data["supports_rgb"] is True
+    assert data["supports_hs"] is True
     assert data["supports_state"] is True
 
 
@@ -104,12 +116,16 @@ def test_mood_state_google_home_only():
 
 
 def test_mood_state_ha_direct():
-    app, _ = _app_with_key(mood_light_entity_id="light.jacwibang_mood")
+    app, _ = _app_with_key(mood_light_entity_id="light.mudeudeung")
     with patch("app.services.mood_service.HAClient") as mock_cls:
         mock_cls.return_value.get_state = AsyncMock(
             return_value={
                 "state": "on",
-                "attributes": {"brightness": 128, "rgb_color": [255, 87, 51]},
+                "attributes": {
+                    "brightness": 128,
+                    "rgb_color": [255, 87, 51],
+                    "hs_color": [12.5, 80.0],
+                },
             }
         )
         client = TestClient(app)
@@ -120,6 +136,7 @@ def test_mood_state_ha_direct():
     assert data["brightness"] == 50
     assert data["color"] == "#ff5733"
     assert data["rgb"] == [255, 87, 51]
+    assert data["hs"] == [12.5, 80.0]
     assert data["state_readable"] is True
 
 
@@ -208,7 +225,7 @@ def test_mood_color_rgb_not_supported_without_entity():
 
 
 def test_mood_color_rgb_ha_direct():
-    app, _ = _app_with_key(mood_light_entity_id="light.jacwibang_mood")
+    app, _ = _app_with_key(mood_light_entity_id="light.mudeudeung")
     with patch("app.services.mood_service.HAClient") as mock_cls:
         mock_cls.return_value.call_service = AsyncMock(return_value=[])
         client = TestClient(app)
@@ -221,8 +238,62 @@ def test_mood_color_rgb_ha_direct():
     mock_cls.return_value.call_service.assert_awaited_once_with(
         "light",
         "turn_on",
-        {"entity_id": "light.jacwibang_mood", "rgb_color": [255, 87, 51]},
+        {"entity_id": "light.mudeudeung", "hs_color": [10.6, 80.0]},
     )
+
+
+def test_mood_color_hs_ha_direct():
+    app, _ = _app_with_key(mood_light_entity_id="light.mudeudeung")
+    with patch("app.services.mood_service.HAClient") as mock_cls:
+        mock_cls.return_value.call_service = AsyncMock(return_value=[])
+        client = TestClient(app)
+        resp = client.post(
+            "/api/v1/mood/color-hs",
+            json={"hue": 0, "saturation": 100},
+            headers={"X-API-Key": "test-key"},
+        )
+    assert resp.status_code == 200
+    mock_cls.return_value.call_service.assert_awaited_once_with(
+        "light",
+        "turn_on",
+        {"entity_id": "light.mudeudeung", "hs_color": [0, 100]},
+    )
+
+
+def test_mood_color_hs_not_supported_without_entity():
+    app, _ = _app_with_key()
+    client = TestClient(app)
+    resp = client.post(
+        "/api/v1/mood/color-hs",
+        json={"hue": 0, "saturation": 100},
+        headers={"X-API-Key": "test-key"},
+    )
+    assert resp.status_code == 503
+    assert resp.json()["detail"]["code"] == "mood_rgb_not_supported"
+
+
+def test_mood_color_preset_ha_direct():
+    app, _ = _app_with_key(mood_light_entity_id="light.mudeudeung")
+    with patch("app.services.mood_service.HAClient") as mock_cls:
+        mock_cls.return_value.call_service = AsyncMock(return_value=[])
+        client = TestClient(app)
+        resp = client.post(
+            "/api/v1/mood/color",
+            json={"name": "red"},
+            headers={"X-API-Key": "test-key"},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["control_path"] == "home_assistant"
+    mock_cls.return_value.call_service.assert_awaited_once_with(
+        "light",
+        "turn_on",
+        {"entity_id": "light.mudeudeung", "hs_color": [0.0, 100.0]},
+    )
+
+
+def test_rgb_to_hs_conversion():
+    assert rgb_to_hs(255, 0, 0) == (0.0, 100.0)
+    assert rgb_to_hs(255, 87, 51) == (10.6, 80.0)
 
 
 def test_mood_color():

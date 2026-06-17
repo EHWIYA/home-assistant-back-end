@@ -5,11 +5,13 @@ from app.exceptions import MoodRgbNotSupportedError
 from app.models.schemas import (
     MoodActionResponse,
     MoodCapabilitiesResponse,
+    MoodHsRange,
     MoodMetaResponse,
     MoodStateResponse,
 )
 from app.services.ha_client import HAClient
 from app.services.mood_client import MOOD_ACTIONS, MOOD_COLORS, MoodClient
+from app.services.mood_color import PRESET_HS_COLOR, rgb_to_hs
 
 
 class MoodService:
@@ -32,19 +34,38 @@ class MoodService:
         color_modes = ["named"]
         actions = list(MOOD_ACTIONS)
         supports_rgb = False
+        supports_hs = False
         supports_state = False
+        color_mode: str | None = None
+        hs_range: MoodHsRange | None = None
+        rgb_range: list[int] | None = None
+        color_temperature: bool | None = None
+
         if self.ha_direct_enabled:
-            color_modes.append("rgb")
+            color_modes.append("hs")
             if "color-rgb" not in actions:
                 actions.append("color-rgb")
+            if "color-hs" not in actions:
+                actions.append("color-hs")
             supports_rgb = True
+            supports_hs = True
             supports_state = True
+            color_mode = "hs"
+            hs_range = MoodHsRange()
+            rgb_range = [0, 255]
+            color_temperature = False
+
         return MoodCapabilitiesResponse(
             actions=actions,
             colors=list(MOOD_COLORS),
+            color_mode=color_mode,
+            hs_range=hs_range,
+            rgb_range=rgb_range,
+            color_temperature=color_temperature,
             color_modes=color_modes,
             supports_rgb=supports_rgb,
             supports_hex=supports_rgb,
+            supports_hs=supports_hs,
             supports_state=supports_state,
         )
 
@@ -92,13 +113,29 @@ class MoodService:
             rgb_list = [r, g, b]
             color_hex = f"#{r:02x}{g:02x}{b:02x}"
 
+        hs_list: list[float] | None = None
+        hs = attrs.get("hs_color")
+        if isinstance(hs, (list, tuple)) and len(hs) >= 2:
+            hs_list = [float(hs[0]), float(hs[1])]
+
         return MoodStateResponse(
             on=on,
             brightness=brightness,
             color=color_hex,
             rgb=rgb_list,
+            hs=hs_list,
             state_readable=True,
             note=None,
+        )
+
+    async def _turn_on_hs(self, hue: float, saturation: float) -> None:
+        await self._ha.call_service(
+            "light",
+            "turn_on",
+            {
+                "entity_id": self._entity_id,
+                "hs_color": [hue, saturation],
+            },
         )
 
     async def send_power(self, on: bool) -> MoodActionResponse:
@@ -136,21 +173,28 @@ class MoodService:
         return MoodActionResponse(command=command, control_path="google_assistant_sdk")
 
     async def send_color(self, name: str) -> MoodActionResponse:
+        key = name.lower()
+        if self.ha_direct_enabled and key in PRESET_HS_COLOR:
+            hue, saturation = PRESET_HS_COLOR[key]
+            await self._turn_on_hs(hue, saturation)
+            return MoodActionResponse(control_path="home_assistant")
+
         command = await self._gh.send_color(name)
         return MoodActionResponse(command=command, control_path="google_assistant_sdk")
+
+    async def send_color_hs(self, hue: float, saturation: float) -> MoodActionResponse:
+        if not self.ha_direct_enabled:
+            raise MoodRgbNotSupportedError()
+
+        await self._turn_on_hs(hue, saturation)
+        return MoodActionResponse(control_path="home_assistant")
 
     async def send_color_rgb(self, r: int, g: int, b: int) -> MoodActionResponse:
         if not self.ha_direct_enabled:
             raise MoodRgbNotSupportedError()
 
-        await self._ha.call_service(
-            "light",
-            "turn_on",
-            {
-                "entity_id": self._entity_id,
-                "rgb_color": [r, g, b],
-            },
-        )
+        hue, saturation = rgb_to_hs(r, g, b)
+        await self._turn_on_hs(hue, saturation)
         return MoodActionResponse(control_path="home_assistant")
 
     async def send_raw_command(self, command: str) -> MoodActionResponse:

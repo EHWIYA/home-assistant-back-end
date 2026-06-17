@@ -7,6 +7,7 @@ from app.models.schemas import (
     MoodCapabilitiesResponse,
     MoodColorRequest,
     MoodColorRgbRequest,
+    MoodColorHsRequest,
     MoodColorTemperatureRequest,
     MoodCommandRequest,
     MoodMetaResponse,
@@ -68,6 +69,15 @@ async def mood_color_rgb(
 ) -> MoodActionResponse:
     r, g, b = body.resolved_rgb()
     return await MoodService(settings).send_color_rgb(r, g, b)
+
+
+@router.post("/color-hs", response_model=MoodActionResponse)
+async def mood_color_hs(
+    body: MoodColorHsRequest,
+    _key: ApiKeyDep,
+    settings: SettingsDep,
+) -> MoodActionResponse:
+    return await MoodService(settings).send_color_hs(body.hue, body.saturation)
 
 
 @router.post("/color-temperature", response_model=MoodActionResponse)
