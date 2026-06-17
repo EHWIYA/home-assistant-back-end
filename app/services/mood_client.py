@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import httpx
@@ -9,6 +10,16 @@ from app.config import Settings
 from app.exceptions import MoodError
 
 logger = logging.getLogger(__name__)
+
+_integration_cache: dict[str, tuple[float, bool]] = {}
+
+
+def clear_integration_cache() -> None:
+    _integration_cache.clear()
+
+
+def invalidate_integration_cache(base_url: str) -> None:
+    _integration_cache.pop(base_url.rstrip("/"), None)
 
 COLOR_KO: dict[str, str] = {
     "red": "빨간색",
@@ -72,6 +83,7 @@ class MoodClient:
         self._timeout = settings.mood_gh_timeout_seconds
         self._room = settings.mood_gh_room
         self._device = settings.mood_gh_device
+        self._integration_cache_ttl = settings.mood_integration_cache_ttl_seconds
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -79,7 +91,7 @@ class MoodClient:
             "Content-Type": "application/json",
         }
 
-    async def check_integration(self) -> bool:
+    async def _fetch_integration(self) -> bool:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             try:
                 resp = await client.get(
@@ -109,8 +121,23 @@ class MoodClient:
             entries = resp.json()
             return any(e.get("domain") == "google_assistant_sdk" for e in entries)
 
+    async def check_integration(self, *, force: bool = False) -> bool:
+        now = time.monotonic()
+        if not force:
+            cached = _integration_cache.get(self._base)
+            if cached is not None and (now - cached[0]) < self._integration_cache_ttl:
+                return cached[1]
+
+        result = await self._fetch_integration()
+        _integration_cache[self._base] = (now, result)
+        return result
+
+    async def check_integration_uncached(self) -> bool:
+        return await self.check_integration(force=True)
+
     async def send_text_command(self, command: str) -> list[dict[str, Any]]:
         if not await self.check_integration():
+            invalidate_integration_cache(self._base)
             raise MoodError(
                 "google_assistant_sdk integration not loaded",
                 status_code=503,

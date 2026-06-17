@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 AcMode = Literal["off", "auto", "cool", "dry"]
 AcLastRunMode = Literal["cool", "dry"]
@@ -340,6 +342,7 @@ MoodColorName = Literal[
     "rainbow",
 ]
 MoodColorTemperatureMode = Literal["warm", "cool"]
+MoodControlPath = Literal["google_assistant_sdk", "home_assistant"]
 
 
 class MoodPowerRequest(BaseModel):
@@ -354,6 +357,44 @@ class MoodColorRequest(BaseModel):
     name: MoodColorName
 
 
+class MoodColorRgbRequest(BaseModel):
+    r: int | None = Field(default=None, ge=0, le=255)
+    g: int | None = Field(default=None, ge=0, le=255)
+    b: int | None = Field(default=None, ge=0, le=255)
+    hex: str | None = Field(
+        default=None,
+        pattern=r"^#[0-9A-Fa-f]{6}$",
+        description="RGB hex (#RRGGBB). r/g/b 와 동시 지정 불가.",
+    )
+
+    @field_validator("hex")
+    @classmethod
+    def normalize_hex(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return value.lower()
+
+    @model_validator(mode="after")
+    def validate_rgb_or_hex(self) -> MoodColorRgbRequest:
+        has_hex = self.hex is not None
+        has_rgb = self.r is not None or self.g is not None or self.b is not None
+        has_full_rgb = self.r is not None and self.g is not None and self.b is not None
+        if has_hex and has_rgb:
+            raise ValueError("provide either r,g,b or hex, not both")
+        if not has_hex and has_rgb and not has_full_rgb:
+            raise ValueError("r, g, b must all be provided")
+        if not has_hex and not has_full_rgb:
+            raise ValueError("provide r,g,b or hex")
+        return self
+
+    def resolved_rgb(self) -> tuple[int, int, int]:
+        if self.hex:
+            h = self.hex.lstrip("#")
+            return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        assert self.r is not None and self.g is not None and self.b is not None
+        return self.r, self.g, self.b
+
+
 class MoodColorTemperatureRequest(BaseModel):
     mode: MoodColorTemperatureMode
 
@@ -364,19 +405,26 @@ class MoodCommandRequest(BaseModel):
 
 class MoodActionResponse(BaseModel):
     ok: bool = True
-    command: str
+    command: str | None = None
+    control_path: MoodControlPath | None = None
 
 
 class MoodCapabilitiesResponse(BaseModel):
     actions: list[str]
     colors: list[str]
     brightness_range: list[int] = Field(default_factory=lambda: [1, 100])
+    color_modes: list[str] = Field(default_factory=lambda: ["named"])
+    supports_rgb: bool = False
+    supports_hex: bool = False
+    supports_state: bool = False
 
 
 class MoodMetaResponse(BaseModel):
     room: str
     device: str
-    path: str = "google_assistant_sdk"
+    path: MoodControlPath = "google_assistant_sdk"
+    control_paths: list[MoodControlPath] = Field(default_factory=lambda: ["google_assistant_sdk"])
+    entity_id: str | None = None
     state_readable: bool = False
 
 
@@ -384,4 +432,6 @@ class MoodStateResponse(BaseModel):
     on: bool | None = None
     brightness: int | None = None
     color: str | None = None
-    note: str = "Google Home 경유 — 상태 읽기 미지원"
+    rgb: list[int] | None = None
+    state_readable: bool = False
+    note: str | None = "Google Home 경유 — 상태 읽기 미지원"

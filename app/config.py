@@ -16,6 +16,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,
     )
 
     ha_base_url: str = Field(default="http://127.0.0.1:8123", alias="HA_BASE_URL")
@@ -62,6 +63,11 @@ class Settings(BaseSettings):
     mood_gh_room: str = Field(default="자취방", alias="MOOD_GH_ROOM")
     mood_gh_device: str = Field(default="무드등", alias="MOOD_GH_DEVICE")
     mood_gh_timeout_seconds: float = Field(default=20.0, alias="MOOD_GH_TIMEOUT_SECONDS")
+    mood_light_entity_id: str = Field(default="", alias="MOOD_LIGHT_ENTITY_ID")
+    mood_integration_cache_ttl_seconds: float = Field(
+        default=120.0,
+        alias="MOOD_INTEGRATION_CACHE_TTL_SECONDS",
+    )
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -89,3 +89,17 @@ class MoodError(HTTPException):
         if reauth_required:
             body["reauth_required"] = True
         super().__init__(status_code=status_code, detail=body)
+
+
+class MoodRgbNotSupportedError(HTTPException):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=503,
+            detail={
+                "detail": (
+                    "RGB/hex color requires MOOD_LIGHT_ENTITY_ID "
+                    "(HA light direct control; not available on Google Home path)"
+                ),
+                "code": "mood_rgb_not_supported",
+            },
+        )
