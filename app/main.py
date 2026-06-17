@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.db.seed import seed_strip_device
 from app.db.session import dispose_engine, init_engine
-from app.routers import ac, health, history, pc, plug, schedules, status, strip, weather
+from app.routers import ac, health, history, mood, pc, plug, schedules, status, strip, weather
 from app.services.ha_ws_cache import get_ha_state_cache
 
 
@@ -30,7 +30,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="iot-api",
         description="BFF for Home Assistant + Hejhome PowerStrip (iot-web)",
-        version="1.8.0",
+        version="1.9.0",
         lifespan=lifespan,
     )
     app.add_middleware(
@@ -49,6 +49,7 @@ def create_app() -> FastAPI:
     app.include_router(strip.router)
     app.include_router(schedules.router)
     app.include_router(weather.router)
+    app.include_router(mood.router)
     return app
 
 

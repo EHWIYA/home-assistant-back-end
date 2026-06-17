@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     )
     weather_cache_ttl_seconds: int = Field(default=900, alias="WEATHER_CACHE_TTL_SECONDS")
 
+    mood_gh_room: str = Field(default="자취방", alias="MOOD_GH_ROOM")
+    mood_gh_device: str = Field(default="무드등", alias="MOOD_GH_DEVICE")
+    mood_gh_timeout_seconds: float = Field(default=20.0, alias="MOOD_GH_TIMEOUT_SECONDS")
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

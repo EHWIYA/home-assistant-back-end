@@ -72,3 +72,20 @@ class WeatherUnavailableError(HTTPException):
             status_code=503,
             detail={"detail": detail, "code": "weather_unavailable"},
         )
+
+
+class MoodError(HTTPException):
+    """Google Home / google_assistant_sdk mood light command failed."""
+
+    def __init__(
+        self,
+        detail: str,
+        status_code: int = 502,
+        code: str = "mood_command_failed",
+        *,
+        reauth_required: bool = False,
+    ):
+        body: dict[str, str | bool] = {"detail": detail, "code": code}
+        if reauth_required:
+            body["reauth_required"] = True
+        super().__init__(status_code=status_code, detail=body)

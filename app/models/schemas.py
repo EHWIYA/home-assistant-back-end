@@ -326,3 +326,62 @@ class ScheduleRunResponse(BaseModel):
 
 class ScheduleRunListResponse(BaseModel):
     runs: list[ScheduleRunResponse]
+
+
+MoodColorName = Literal[
+    "red",
+    "blue",
+    "green",
+    "yellow",
+    "purple",
+    "white",
+    "warm",
+    "cool",
+    "rainbow",
+]
+MoodColorTemperatureMode = Literal["warm", "cool"]
+
+
+class MoodPowerRequest(BaseModel):
+    on: bool
+
+
+class MoodBrightnessRequest(BaseModel):
+    percent: int = Field(ge=1, le=100)
+
+
+class MoodColorRequest(BaseModel):
+    name: MoodColorName
+
+
+class MoodColorTemperatureRequest(BaseModel):
+    mode: MoodColorTemperatureMode
+
+
+class MoodCommandRequest(BaseModel):
+    command: str = Field(min_length=1, description="한국어 전체 음성 명령 (escape hatch)")
+
+
+class MoodActionResponse(BaseModel):
+    ok: bool = True
+    command: str
+
+
+class MoodCapabilitiesResponse(BaseModel):
+    actions: list[str]
+    colors: list[str]
+    brightness_range: list[int] = Field(default_factory=lambda: [1, 100])
+
+
+class MoodMetaResponse(BaseModel):
+    room: str
+    device: str
+    path: str = "google_assistant_sdk"
+    state_readable: bool = False
+
+
+class MoodStateResponse(BaseModel):
+    on: bool | None = None
+    brightness: int | None = None
+    color: str | None = None
+    note: str = "Google Home 경유 — 상태 읽기 미지원"
