@@ -25,6 +25,7 @@
 |------|------|
 | `.cursor/rules/iot-api.mdc` | 아키텍처·API·레이어 |
 | `.cursor/rules/windows-shell-utf8.mdc` | PowerShell UTF-8, `&&` 금지 |
+| `.cursor/rules/agent-wait-minimal.mdc` | Shell·Await 대기 최소화 (`block_until_ms` 상한 40초) |
 
 새 채팅에서 Handoff 문서를 붙여 넣으면 도메인·NAS 맥락을 보강할 수 있습니다.
 
@@ -50,6 +51,7 @@
 
 - `&&` 사용하지 않음 → `;` 또는 호출 분리
 - `pip` / `pytest` / `python` 전: `. .\.cursor\scripts\ensure-utf8.ps1`
+- **대기**: `.cursor/rules/agent-wait-minimal.mdc` — `block_until_ms` 최대 40초, 짧은 명령은 최소 버퍼
 
 ## 환경 변수
 

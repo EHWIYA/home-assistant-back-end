@@ -1,0 +1,9 @@
+[Unit]
+Description=IoT API strip schedule runner (one shot)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/iwh/iot/api
+ExecStart=/usr/bin/docker exec iot-api python -m app.cli.scheduler

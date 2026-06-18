@@ -4,13 +4,14 @@ FastAPI BFF for [iot-web](https://iot.iwhya.kr). Home Assistant is the only data
 
 - Production: `https://iot-api.iwhya.kr` (Tailscale + LAN via nginx)
 - Local: `http://127.0.0.1:8002`
+- OpenAPI version: **2.0.0**
 
 ## Quick start (local)
 
 ```bash
 python -m venv .venv
 .venv\Scripts\activate   # Windows
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 # .env: HA_TOKEN, IOT_API_KEY (에이전트/로컬에서 관리, git 제외)
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8002
 ```
@@ -29,67 +30,57 @@ curl -H "X-API-Key: YOUR_KEY" http://127.0.0.1:8002/api/v1/status
 | POST | `/api/v1/plug` | `X-API-Key` |
 | POST | `/api/v1/ac` | `X-API-Key` |
 | GET | `/api/v1/history/power?hours=24` | `X-API-Key` |
-| GET | `/api/v1/strip/state` | `X-API-Key` (DB + Hejhome 설정 필요) |
-| POST | `/api/v1/strip/channels/{1-4}` body `{"on": true}` | `X-API-Key` |
-| POST | `/api/v1/strip/presets/{name}` | `X-API-Key` |
-| GET/POST/PATCH/DELETE | `/api/v1/schedules` … | `X-API-Key` (DB + Hejhome) |
+| GET | `/api/v1/weather/local` | `X-API-Key` |
+| GET | `/api/v1/strip/state` | `X-API-Key` (DB + Hejhome) |
+| POST | `/api/v1/strip/channels/{1-4}` | `X-API-Key` |
+| GET/POST/PATCH/DELETE | `/api/v1/strip/presets` | `X-API-Key` |
+| POST | `/api/v1/strip/presets/{name}` | `X-API-Key` (적용) |
+| GET | `/api/v1/schedules?channel=1` | `X-API-Key` |
+| GET | `/api/v1/schedules/preview?from=&to=` | `X-API-Key` |
+| GET/POST/PATCH/DELETE | `/api/v1/schedules` … | `X-API-Key` |
+| GET | `/api/v1/meta/holidays?year=2026` | `X-API-Key` |
 
-### Strip (Hejhome PowerStrip2)
+### Strip · Schedules
 
-- `DATABASE_URL`, `HEJHOME_EMAIL`, `HEJHOME_PASSWORD`, `HEJHOME_STRIP_ID`, `HEJHOME_FAMILY_ID` 필요
-- 컨테이너 기동 시 `alembic upgrade head` 자동 실행 (`scripts/docker-entrypoint.sh`)
-- NAS PostgreSQL: `127.0.0.1:5433/iot_db` (서버 담당 compose)
-
-```bash
-curl -H "X-API-Key: YOUR_KEY" http://127.0.0.1:8002/api/v1/strip/state
-curl -X POST -H "X-API-Key: YOUR_KEY" -H "Content-Type: application/json" \
-  -d '{"on":true}' http://127.0.0.1:8002/api/v1/strip/channels/1
-```
-
-### Schedules (KST)
-
-```bash
-docker exec iot-api python -m app.cli.scheduler
-```
+- `DATABASE_URL`, Hejhome env 필요 — `AGENTS.md` / `.cursor/rules/env.mdc`
+- 컨테이너 기동 시 `alembic upgrade head` (`scripts/docker-entrypoint.sh`)
+- 스케줄 워커: `docker exec iot-api python -m app.cli.scheduler` (NAS systemd timer)
 
 상세: `.cursor/coordination/STRIP_API_v1.md`
 
+## CI / 배포
+
+| Workflow | 트리거 | 내용 |
+|----------|--------|------|
+| `ci.yml` | PR, `main` push | pytest |
+| `deploy.yml` | `main` push, manual | pytest → GHCR → NAS `compose pull/up` |
+
+- 이미지 pin: `IOT_API_IMAGE=ghcr.io/...:sha-XXXXXXX` (NAS `.deploy-image`)
+- 롤백: `.github/DEPLOY_RUNBOOK.md`
+- Secrets·TS 키 만료: `.github/GITHUB_SECRETS.md`
+- Dependabot: pip·GitHub Actions 주 1회 PR
+
 ## NAS deploy
 
-1. Copy `docker-compose.yml` to NAS deploy dir (e.g. `/home/iwh/iot/api/`)
-2. Create `.env` on NAS (not in git): `HA_TOKEN`, `IOT_API_KEY`, `HA_BASE_URL=http://127.0.0.1:8123`, `CORS_ORIGINS`
-3. Set `image:` in compose to your GHCR path
-4. **HA on host network (운영 확정):** iot-api `network_mode: host` + `HA_BASE_URL=http://127.0.0.1:8123` — bridge + `host.docker.internal` 는 UFW 에서 막힐 수 있음
-
-GitHub Actions (`deploy.yml`) builds to GHCR and SSHs to NAS for `COMPOSE_PROJECT_NAME=iot-api docker compose pull && up -d` (NAS 운영 프로젝트명과 동일).
-
-### Secrets (GitHub)
-
-- `NAS_HOST`, `NAS_SSH_USER`, `NAS_SSH_KEY`
-- NAS `.env` is managed manually on the server (not overwritten by CI)
+1. `docker-compose.yml` → `/home/iwh/iot/api/`
+2. `.env` on NAS (git 제외)
+3. `network_mode: host` + `HA_BASE_URL=http://127.0.0.1:8123`
+4. 스케줄 timer: `sudo bash scripts/nas/bin/install-iot-scheduler-systemd.sh`
+5. 공휴일 cron: `infra/docs/kr-holidays-cron.md`
 
 ## Tests
-
-Windows (UTF-8·한글 깨짐 방지):
 
 ```powershell
 .\.cursor\scripts\dev-test.ps1
 ```
 
-Linux/macOS:
-
-```bash
-pytest
-```
-
-Cursor 에이전트 규칙: `AGENTS.md`, `.cursor/rules/`.
-
-IDE 터미널 UTF-8은 **Cursor 전역** User 설정 + `%USERPROFILE%\.cursor\ensure-utf8.ps1` (모든 프로젝트 공통). 적용 후 **새 터미널**을 열어 주세요.
+(`requirements-dev.txt` — prod는 `requirements.txt` 만 Docker 이미지에 포함)
 
 ## Architecture
 
 ```
 iot-web → X-API-Key → iot-api → Bearer HA_TOKEN → Home Assistant
+                     └→ Hejhome (strip) + PostgreSQL (schedules)
 ```
 
-SmartThings / DB / WebSocket are out of scope for v1.
+Cursor: `AGENTS.md`, `.cursor/rules/`.
