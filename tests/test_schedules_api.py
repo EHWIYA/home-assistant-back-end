@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from app.config import get_settings
 from app.deps import get_schedule_service
 from app.main import create_app
+from tests.conftest import api_key_headers
 
 SAMPLE_ID = str(uuid.uuid4())
 
@@ -71,7 +71,7 @@ def schedules_client():
 
 
 def _headers() -> dict[str, str]:
-    return {"X-API-Key": get_settings().iot_api_key}
+    return api_key_headers()
 
 
 def test_list_schedules(schedules_client):

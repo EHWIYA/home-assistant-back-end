@@ -1,0 +1,11 @@
+---
+description: git commit·push는 사용자 명시 요청 시에만
+alwaysApply: true
+---
+
+# Git commit / push 게이트
+
+- **커밋·push는 사용자가 명시적으로 요청할 때만** 수행한다.
+- 구현·테스트 완료 후에도 기본은 **변경 요약 + 사용자 확인 대기**.
+- 「커밋 푸시 전까지」= **커밋·push 모두 하지 않음** (구현·테스트만).
+- amend·force push 금지 규칙은 사용자 git 규칙을 따른다.

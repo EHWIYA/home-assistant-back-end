@@ -52,8 +52,8 @@ curl -H "X-API-Key: YOUR_KEY" http://127.0.0.1:8002/api/v1/status
 
 | Workflow | 트리거 | 내용 |
 |----------|--------|------|
-| `ci.yml` | PR, `main` push | pytest |
-| `deploy.yml` | `main` push, manual | pytest → GHCR → NAS `compose pull/up` |
+| `ci.yml` | **PR만** | pytest |
+| `deploy.yml` | `main` push, manual | pytest → GHCR → NAS (main당 pytest 1회) |
 
 - 이미지 pin: `IOT_API_IMAGE=ghcr.io/...:sha-XXXXXXX` (NAS `.deploy-image`)
 - 롤백: `.github/DEPLOY_RUNBOOK.md`

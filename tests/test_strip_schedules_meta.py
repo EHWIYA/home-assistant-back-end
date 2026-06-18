@@ -3,9 +3,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from app.config import get_settings
 from app.deps import get_strip_service
 from app.main import create_app
+from tests.conftest import api_key_headers
 
 
 @pytest.fixture
@@ -45,7 +45,7 @@ def presets_client():
 
 
 def _headers() -> dict[str, str]:
-    return {"X-API-Key": get_settings().iot_api_key}
+    return api_key_headers()
 
 
 def test_holidays_meta(meta_client):

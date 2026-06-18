@@ -45,6 +45,17 @@ pytest -q  (block_until_ms: 0)
 2. 전체 스위트는 PR/배포 직전 또는 사용자 요청 시
 3. 전체 실행 시에도 **40초 block → 백그라운드 → 짧은 Await** 패턴
 
+## 테스트 hang 재발 방지
+
+| 금지 | 대안 |
+|------|------|
+| SSE/WebSocket `TestClient.stream()` 무한 루프 | `is_disconnected=True` mock 또는 snapshot만 단위 검증 |
+| `get_settings().iot_api_key` (CI에 .env 없음) | `tests.conftest.api_key_headers()` + `TEST_IOT_API_KEY` |
+| HA WS 캐시 lifespan 실기동 | `tests/conftest.py` autouse patch |
+| 동일 push에 CI+deploy **pytest 2회** | PR→`ci.yml`, main→`deploy.yml` 만 |
+
+`pytest-timeout` 30s 전역 (`pytest.ini`) — hang 시 빠르게 fail.
+
 ## 요약
 
 - 짧은 작업: 최소 버퍼로 빠르게 반환

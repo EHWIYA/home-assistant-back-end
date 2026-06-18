@@ -1,16 +1,14 @@
-# PR·main push 시 pytest — deploy 전 품질 게이트
+# PR 전용 pytest — main push 시 deploy.yml 에서 1회만 실행 (중복 방지)
 name: CI
 
 on:
   pull_request:
-  push:
-    branches: [main]
 
 jobs:
   test:
     name: pytest
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
 
     steps:
       - name: Checkout

@@ -2,11 +2,7 @@
 # iot-api 배포 workflow
 #
 # 트리거: main push, workflow_dispatch
-#
-# 흐름
-#   0) test            — pytest (ci.yml 과 동일 게이트)
-#   1) build-and-push  — Docker build → GHCR (:sha-XXXXXXX + :latest)
-#   2) deploy-nas      — Tailscale → SSH → pin IOT_API_IMAGE → compose pull/up
+# pytest: 이 workflow 에서만 (main). PR 은 ci.yml 만.
 #
 # 롤백: .github/DEPLOY_RUNBOOK.md
 # =============================================================================
@@ -28,7 +24,7 @@ jobs:
   test:
     name: pytest
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
