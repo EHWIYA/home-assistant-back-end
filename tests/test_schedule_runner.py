@@ -64,3 +64,14 @@ async def test_run_due_executes_matching_schedule():
 
     assert out["executed"] == 1
     execute.assert_awaited_once()
+    source = execute.await_args.kwargs["source"]
+    assert source == f"schedule:{sched.id}"
+    assert len(source) <= 128
+
+
+def test_schedule_audit_source_exceeds_legacy_varchar32():
+    """Regression: schedule:<uuid> is 45 chars — old VARCHAR(32) broke audit + runs."""
+    sid = uuid.uuid4()
+    source = f"schedule:{sid}"
+    assert len(source) == 45
+    assert len(source) > 32

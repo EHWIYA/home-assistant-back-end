@@ -49,7 +49,7 @@ class ControlAudit(Base):
     device_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("devices.id", ondelete="CASCADE"), nullable=False)
     channel_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     action: Mapped[str] = mapped_column(String(16), nullable=False)
-    source: Mapped[str] = mapped_column(String(32), nullable=False, default="api")
+    source: Mapped[str] = mapped_column(String(128), nullable=False, default="api")
     success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
