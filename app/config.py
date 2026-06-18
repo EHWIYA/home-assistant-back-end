@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -60,6 +61,8 @@ class Settings(BaseSettings):
     )
     weather_cache_ttl_seconds: int = Field(default=900, alias="WEATHER_CACHE_TTL_SECONDS")
 
+    kr_holidays_data_dir: str = Field(default="", alias="KR_HOLIDAYS_DATA_DIR")
+
     mood_gh_room: str = Field(default="자취방", alias="MOOD_GH_ROOM")
     mood_gh_device: str = Field(default="무드등", alias="MOOD_GH_DEVICE")
     mood_gh_timeout_seconds: float = Field(default=20.0, alias="MOOD_GH_TIMEOUT_SECONDS")
@@ -72,6 +75,12 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def kr_holidays_dir(self) -> Path | None:
+        if not self.kr_holidays_data_dir.strip():
+            return None
+        return Path(self.kr_holidays_data_dir)
 
     @property
     def strip_configured(self) -> bool:

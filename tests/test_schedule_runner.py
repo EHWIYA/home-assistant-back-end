@@ -17,6 +17,11 @@ def _schedule(**kwargs):
     s.name = kwargs.get("name", "test")
     s.time_kst = kwargs.get("time_kst", "08:30")
     s.days_of_week = kwargs.get("days_of_week", [0])
+    s.recurrence_type = kwargs.get("recurrence_type", "weekly")
+    s.specific_dates = kwargs.get("specific_dates", [])
+    s.exclude_dates = kwargs.get("exclude_dates", [])
+    s.holiday_mode = kwargs.get("holiday_mode", "ignore")
+    s.include_substitute = kwargs.get("include_substitute", True)
     s.enabled = True
     s.action_type = "channel"
     s.channel_number = 1

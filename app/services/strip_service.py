@@ -122,12 +122,64 @@ class StripService:
 
         return await self.get_state()
 
-    async def apply_preset(self, name: str, *, source: str | None = None) -> dict:
+    def _validate_preset_channels(self, channels: dict) -> dict[str, bool]:
+        if not channels:
+            raise HejhomeError("channels must not be empty", status_code=400, code="invalid_preset")
+        normalized: dict[str, bool] = {}
+        for key, value in channels.items():
+            channel_key = str(key)
+            if channel_key not in {"1", "2", "3", "4"}:
+                raise HejhomeError(
+                    f"Invalid channel key: {key}",
+                    status_code=400,
+                    code="invalid_preset",
+                )
+            normalized[channel_key] = bool(value)
+        return normalized
+
+    def _preset_to_dict(self, preset: StripPreset) -> dict:
+        return {
+            "name": preset.name,
+            "channels": {str(k): bool(v) for k, v in preset.channels.items()},
+            "created_at": preset.created_at.isoformat(),
+        }
+
+    async def list_presets(self) -> list[dict]:
+        result = await self._session.execute(select(StripPreset).order_by(StripPreset.name))
+        return [self._preset_to_dict(row) for row in result.scalars().all()]
+
+    async def create_preset(self, name: str, channels: dict) -> dict:
+        normalized = self._validate_preset_channels(channels)
+        existing = await self._session.execute(select(StripPreset).where(StripPreset.name == name))
+        if existing.scalar_one_or_none() is not None:
+            raise HejhomeError(f"Preset already exists: {name}", status_code=409, code="preset_exists")
+        preset = StripPreset(name=name, channels=normalized)
+        self._session.add(preset)
+        await self._session.commit()
+        await self._session.refresh(preset)
+        return self._preset_to_dict(preset)
+
+    async def update_preset(self, name: str, channels: dict) -> dict:
+        preset = await self._get_preset_model(name)
+        preset.channels = self._validate_preset_channels(channels)
+        await self._session.commit()
+        await self._session.refresh(preset)
+        return self._preset_to_dict(preset)
+
+    async def delete_preset(self, name: str) -> None:
+        preset = await self._get_preset_model(name)
+        await self._session.delete(preset)
+        await self._session.commit()
+
+    async def _get_preset_model(self, name: str) -> StripPreset:
         result = await self._session.execute(select(StripPreset).where(StripPreset.name == name))
         preset = result.scalar_one_or_none()
         if preset is None:
             raise HejhomeError(f"Preset not found: {name}", status_code=404, code="preset_not_found")
+        return preset
 
+    async def apply_preset(self, name: str, *, source: str | None = None) -> dict:
+        preset = await self._get_preset_model(name)
         device, channels = await self._get_device_with_channels()
         requirements: dict[str, bool] = {}
         for ch in channels:

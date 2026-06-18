@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 
 from fastapi import APIRouter, Query
 
@@ -6,6 +7,7 @@ from app.deps import ApiKeyDep, ScheduleServiceDep
 from app.models.schemas import (
     ScheduleCreateRequest,
     ScheduleListResponse,
+    SchedulePreviewListResponse,
     ScheduleResponse,
     ScheduleRunListResponse,
     ScheduleRunResponse,
@@ -15,12 +17,25 @@ from app.models.schemas import (
 router = APIRouter(prefix="/api/v1/schedules", tags=["schedules"])
 
 
+@router.get("/preview", response_model=SchedulePreviewListResponse)
+async def preview_schedules(
+    _key: ApiKeyDep,
+    service: ScheduleServiceDep,
+    from_date: date = Query(alias="from"),
+    to_date: date = Query(alias="to"),
+    channel: int | None = Query(default=None, ge=1, le=4),
+) -> SchedulePreviewListResponse:
+    slots = await service.preview_schedules(from_date=from_date, to_date=to_date, channel=channel)
+    return SchedulePreviewListResponse(slots=slots)
+
+
 @router.get("", response_model=ScheduleListResponse)
 async def list_schedules(
     _key: ApiKeyDep,
     service: ScheduleServiceDep,
+    channel: int | None = Query(default=None, ge=1, le=4),
 ) -> ScheduleListResponse:
-    items = await service.list_schedules()
+    items = await service.list_schedules(channel=channel)
     return ScheduleListResponse(schedules=[ScheduleResponse(**item) for item in items])
 
 

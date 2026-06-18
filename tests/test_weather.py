@@ -109,12 +109,16 @@ def test_nearest_fcst_items():
 
 @pytest.mark.asyncio
 async def test_weather_service_parses_ncst_and_fcst():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
     settings = Settings(
         KMA_SERVICE_KEY="test-key",
         WEATHER_LOCAL_NX=58,
         WEATHER_LOCAL_NY=125,
     )
     service = WeatherService(settings)
+    fixed_now = datetime(2026, 6, 4, 12, 10, tzinfo=ZoneInfo("Asia/Seoul"))
 
     async def fake_ncst(nx, ny, base_date, base_time):
         return _ncst_payload()["response"]["body"]["items"]["item"]
@@ -127,7 +131,10 @@ async def test_weather_service_parses_ncst_and_fcst():
     with (
         patch.object(service, "_fetch_ncst", side_effect=fake_ncst),
         patch.object(service, "_call_kma", side_effect=fake_fcst),
+        patch("app.services.weather_service.datetime") as mock_dt,
     ):
+        mock_dt.now.return_value = fixed_now
+        mock_dt.strptime = datetime.strptime
         result = await service.get_local_weather()
 
     assert result.temperature == 28.0

@@ -252,7 +252,36 @@ class StripPresetApplyResponse(BaseModel):
     state: StripStateResponse
 
 
+class StripPresetResponse(BaseModel):
+    name: str
+    channels: dict[str, bool]
+    created_at: str
+
+
+class StripPresetListResponse(BaseModel):
+    presets: list[StripPresetResponse]
+
+
+class StripPresetCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    channels: dict[str, bool] = Field(
+        description='Channel on/off map, e.g. {"1": true, "2": false}',
+    )
+
+
+class StripPresetUpdateRequest(BaseModel):
+    channels: dict[str, bool]
+
+
+class HolidaysResponse(BaseModel):
+    year: int
+    dates: list[str]
+    source: str
+
+
 ScheduleActionType = Literal["channel", "preset"]
+RecurrenceType = Literal["weekly", "once", "daily"]
+HolidayMode = Literal["ignore", "skip", "run_only"]
 
 
 class ScheduleCreateRequest(BaseModel):
@@ -262,8 +291,16 @@ class ScheduleCreateRequest(BaseModel):
     channel_number: int | None = Field(default=None, ge=1, le=4)
     channel_on: bool | None = None
     preset_name: str | None = Field(default=None, max_length=64)
-    time_kst: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    time_kst: str = Field(
+        pattern=r"^([01]\d|2[0-3]):[0-5]\d$",
+        description="24h KST HH:MM. PWA 12h UI는 프론트에서 변환.",
+    )
     days_of_week: list[int] = Field(default_factory=lambda: list(range(7)))
+    recurrence_type: RecurrenceType = "weekly"
+    specific_dates: list[str] = Field(default_factory=list)
+    exclude_dates: list[str] = Field(default_factory=list)
+    holiday_mode: HolidayMode = "ignore"
+    include_substitute: bool = True
 
     @field_validator("days_of_week")
     @classmethod
@@ -283,8 +320,17 @@ class ScheduleUpdateRequest(BaseModel):
     channel_number: int | None = Field(default=None, ge=1, le=4)
     channel_on: bool | None = None
     preset_name: str | None = Field(default=None, max_length=64)
-    time_kst: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    time_kst: str | None = Field(
+        default=None,
+        pattern=r"^([01]\d|2[0-3]):[0-5]\d$",
+        description="24h KST HH:MM",
+    )
     days_of_week: list[int] | None = None
+    recurrence_type: RecurrenceType | None = None
+    specific_dates: list[str] | None = None
+    exclude_dates: list[str] | None = None
+    holiday_mode: HolidayMode | None = None
+    include_substitute: bool | None = None
 
     @field_validator("days_of_week")
     @classmethod
@@ -309,8 +355,25 @@ class ScheduleResponse(BaseModel):
     preset_name: str | None = None
     time_kst: str
     days_of_week: list[int]
+    recurrence_type: RecurrenceType = "weekly"
+    specific_dates: list[str] = Field(default_factory=list)
+    exclude_dates: list[str] = Field(default_factory=list)
+    holiday_mode: HolidayMode = "ignore"
+    include_substitute: bool = True
     created_at: str
     updated_at: str
+
+
+class SchedulePreviewSlot(BaseModel):
+    schedule_id: str
+    schedule_name: str
+    at_kst: str
+    channel_number: int | None = None
+    action_type: ScheduleActionType
+
+
+class SchedulePreviewListResponse(BaseModel):
+    slots: list[SchedulePreviewSlot]
 
 
 class ScheduleListResponse(BaseModel):
@@ -322,8 +385,10 @@ class ScheduleRunResponse(BaseModel):
     schedule_id: str
     scheduled_at: str
     status: Literal["pending", "success", "failed"]
+    executed_at: str
+    success: bool
     detail: str | None = None
-    created_at: str
+    created_at: str | None = None
 
 
 class ScheduleRunListResponse(BaseModel):

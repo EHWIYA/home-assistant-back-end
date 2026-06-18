@@ -79,6 +79,11 @@ class Schedule(Base):
     preset_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
     time_kst: Mapped[str] = mapped_column(String(5), nullable=False)
     days_of_week: Mapped[list] = mapped_column(JSONB, nullable=False)
+    recurrence_type: Mapped[str] = mapped_column(String(16), nullable=False, default="weekly")
+    specific_dates: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    exclude_dates: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    holiday_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="ignore")
+    include_substitute: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

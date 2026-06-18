@@ -39,6 +39,12 @@ class ScheduleRunner:
                 time_kst=schedule.time_kst,
                 days_of_week=schedule.days_of_week,
                 now=now_kst,
+                recurrence_type=schedule.recurrence_type,
+                specific_dates=schedule.specific_dates,
+                exclude_dates=schedule.exclude_dates,
+                holiday_mode=schedule.holiday_mode,
+                include_substitute=schedule.include_substitute,
+                is_holiday_fn=self._schedule_service._holiday_checker(schedule.include_substitute),
             ):
                 continue
 
