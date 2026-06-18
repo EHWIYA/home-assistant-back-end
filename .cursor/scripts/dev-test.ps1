@@ -14,6 +14,6 @@ if (-not (Test-Path $venvPython)) {
     python -m venv .venv
 }
 
-& $venvPip install -q -r requirements.txt
+& $venvPip install -q -r requirements-dev.txt
 & $venvPython -m pytest -q @args
 exit $LASTEXITCODE

@@ -7,7 +7,7 @@
 # HA가 host network이면 iot-api도 host network 권장 (bridge→8123 UFW 차단 이슈 회피)
 services:
   iot-api:
-    image: ghcr.io/ehwiya/home-assistant-back-end:latest
+    image: ${IOT_API_IMAGE:-ghcr.io/ehwiya/home-assistant-back-end:latest}
     container_name: iot-api
     restart: unless-stopped
     network_mode: host
