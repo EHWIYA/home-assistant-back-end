@@ -1,4 +1,3 @@
-import asyncio
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -95,12 +94,14 @@ def test_status_stream_snapshot_event():
     client = _app_with_key()
     expected = _status_from_fixture()
 
-    def _fake_subscribe() -> asyncio.Queue[str | None]:
-        return asyncio.Queue()
-
     with patch("app.routers.status.fetch_status", new_callable=AsyncMock) as mock_fetch:
         mock_fetch.return_value = expected
-        with patch.object(get_ha_state_cache(), "subscribe", side_effect=_fake_subscribe):
+        # SSE generator는 snapshot 후 무한 루프 — disconnect 즉시 True 로 종료
+        with patch(
+            "starlette.requests.Request.is_disconnected",
+            new_callable=AsyncMock,
+            return_value=True,
+        ):
             with client.stream(
                 "GET",
                 "/api/v1/status/stream",
@@ -108,6 +109,5 @@ def test_status_stream_snapshot_event():
             ) as resp:
                 assert resp.status_code == 200
                 chunk = next(resp.iter_text())
-                resp.close()
     assert chunk.startswith("event: snapshot\n")
     assert "switch" in chunk
