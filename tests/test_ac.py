@@ -540,7 +540,7 @@ def test_ac_away_enabled_toggle():
     )
 
 
-def test_ac_post_operating_mode_auto_with_mode_off_corrects_ha_mode():
+def test_ac_post_mode_off_with_operating_mode_auto_invokes_turn_off():
     app, settings = _app_with_key()
     with patch("app.routers.ac.HAClient") as mock_cls:
         mock_ha = mock_cls.return_value
@@ -548,7 +548,7 @@ def test_ac_post_operating_mode_auto_with_mode_off_corrects_ha_mode():
 
         async def _get_state(entity_id: str) -> dict:
             if entity_id == ENTITY_AC_MODE:
-                return {"state": "auto"}
+                return {"state": "off"}
             return {"state": "on"}
 
         mock_ha.get_state = AsyncMock(side_effect=_get_state)
@@ -562,22 +562,23 @@ def test_ac_post_operating_mode_auto_with_mode_off_corrects_ha_mode():
             )
 
     assert resp.status_code == 200
-    assert resp.json()["applied_mode"] == "auto"
-    turn_off_calls = [
-        c
-        for c in mock_ha.call_service.await_args_list
-        if c.args[:2] == ("script", "turn_on")
-        and c.args[2].get("entity_id") == ENTITY_AC_SCRIPT_TURN_OFF
-    ]
-    assert not turn_off_calls
+    payload = resp.json()
+    assert payload["applied_mode"] == "off"
+    assert payload["operating_mode"] == "auto"
+    first = mock_ha.call_service.await_args_list[0]
+    assert first.args == (
+        "script",
+        "turn_on",
+        {"entity_id": ENTITY_AC_SCRIPT_TURN_OFF},
+    )
     mode_sync = [
         c
         for c in mock_ha.call_service.await_args_list
         if c.args[:2] == ("input_select", "select_option")
-        and c.args[2].get("option") == "auto"
+        and c.args[2].get("option") == "off"
     ]
     assert mode_sync
-    assert _smart_on_calls(mock_ha)
+    assert not _smart_on_calls(mock_ha)
 
 
 def test_ac_state_inconsistent_when_automation_blocked():

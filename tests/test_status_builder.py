@@ -241,15 +241,15 @@ def test_resolve_ac_mutex_operating_mode_auto():
 
 
 def test_resolve_ha_ac_mode_off_with_operating_mode_auto():
-    assert resolve_ha_ac_mode(mode="off", operating_mode="auto") == "auto"
+    assert resolve_ha_ac_mode(mode="off", operating_mode="auto") == "off"
 
 
 def test_resolve_ha_ac_mode_off_with_operating_mode_away():
-    assert resolve_ha_ac_mode(mode="off", operating_mode="away") == "auto"
+    assert resolve_ha_ac_mode(mode="off", operating_mode="away") == "off"
 
 
 def test_resolve_ha_ac_mode_off_with_auto_toggle():
-    assert resolve_ha_ac_mode(mode="off", auto_toggle=True) == "auto"
+    assert resolve_ha_ac_mode(mode="off", auto_toggle=True) == "off"
 
 
 def test_resolve_ha_ac_mode_off_manual_stays_off():

@@ -217,18 +217,12 @@ def resolve_ha_ac_mode(
     auto_toggle: bool | None = None,
     away_toggle: bool | None = None,
 ) -> AcMode:
-    """Map API request mode to HA ``input_select`` value.
+    """Map API request ``mode`` to HA ``input_select`` value.
 
-    When automation (auto/away) is being enabled but ``mode=off`` was sent,
-    keep ``input_select`` at ``auto`` so HA ON/re-ON automations are not blocked.
+    ``operating_mode`` / mutex toggles are applied separately; they must not
+    override a physical ``mode=off`` (turn_off script + ``input_select=off``).
     """
-    if mode != "off":
-        return mode
-    if operating_mode in ("auto", "away"):
-        return "auto"
-    if auto_toggle is True or away_toggle is True:
-        return "auto"
-    return "off"
+    return mode
 
 
 def is_ac_automation_blocked(

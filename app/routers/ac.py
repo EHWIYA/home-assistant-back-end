@@ -401,7 +401,7 @@ async def set_ac(
     )
 
     try:
-        if body.mode == "off" and ha_mode == "off":
+        if body.mode == "off":
             await _invoke_ac_turn_off_script(ha)
         elif body.mode == "cool":
             await ha.call_service(
