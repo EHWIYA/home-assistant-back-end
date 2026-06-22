@@ -1,12 +1,12 @@
 # Production pins — bump via Dependabot or intentional manual update + pytest
 alembic==1.18.4
 asyncpg==0.31.0
-fastapi==0.136.1
-greenlet==3.5.0
+fastapi==0.138.0
+greenlet==3.5.2
 httpx==0.28.1
 pydantic==2.13.4
-pydantic-settings==2.14.1
-SQLAlchemy==2.0.49
+pydantic-settings==2.14.2
+SQLAlchemy==2.0.51
 tzdata==2026.2
-uvicorn[standard]==0.47.0
+uvicorn[standard]==0.49.0
 websockets==16.0
