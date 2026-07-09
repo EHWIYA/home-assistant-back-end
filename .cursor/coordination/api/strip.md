@@ -1,7 +1,7 @@
-# Strip API v1 — PWA / 서버 합의용 초안
+# Strip API v1
 
 Base: `https://iot-api.iwhya.kr` (로컬 `http://127.0.0.1:8002`)  
-인증: 헤더 `X-API-Key: <IOT_API_KEY>`
+인증: `X-API-Key: <IOT_API_KEY>`
 
 ## GET `/api/v1/strip/state`
 
@@ -21,23 +21,17 @@ Base: `https://iot-api.iwhya.kr` (로컬 `http://127.0.0.1:8002`)
 
 ## POST `/api/v1/strip/channels/{channel}`
 
-- `channel`: 1–4
-- Body: `{ "on": true }`
-- Response: 동일 `StripStateResponse`
+- `channel`: 1–4 · Body: `{ "on": true }` · Response: `StripStateResponse`
 
 ## POST `/api/v1/strip/presets/{name}`
 
-- DB `strip_presets` 행 필요 (서버/백엔드에서 시드)
-- `channels` JSON 예: `{"1": true, "2": false, "3": false, "4": true}`
+- DB `strip_presets` 행 필요
+- `channels` 예: `{"1": true, "2": false, "3": false, "4": true}`
 
 ## GET `/health`
 
 ```json
-{
-  "status": "ok",
-  "ha_reachable": true,
-  "db_reachable": true
-}
+{ "status": "ok", "ha_reachable": true, "db_reachable": true }
 ```
 
 `db_reachable`는 `DATABASE_URL` 미설정 시 `null`.
@@ -48,18 +42,15 @@ Base: `https://iot-api.iwhya.kr` (로컬 `http://127.0.0.1:8002`)
 
 ## Schedules (Phase 2)
 
-인증: `X-API-Key`. `days_of_week`: **0=월 … 6=일** (Python `weekday()`). 시간은 **KST `HH:MM`**.
+`days_of_week`: **0=월 … 6=일**. 시간 **KST `HH:MM`**.
 
-| Method | Path | 설명 |
-|--------|------|------|
-| GET | `/api/v1/schedules` | 목록 |
-| POST | `/api/v1/schedules` | 생성 (201) |
-| GET | `/api/v1/schedules/{id}` | 단건 |
-| PATCH | `/api/v1/schedules/{id}` | 수정 |
-| DELETE | `/api/v1/schedules/{id}` | 삭제 (204) |
-| GET | `/api/v1/schedules/{id}/runs?limit=50` | 실행 이력 |
+| Method | Path |
+|--------|------|
+| GET/POST | `/api/v1/schedules` |
+| GET/PATCH/DELETE | `/api/v1/schedules/{id}` |
+| GET | `/api/v1/schedules/{id}/runs?limit=50` |
 
-### POST body 예 (채널 ON)
+### POST 예 (채널 ON)
 
 ```json
 {
@@ -73,7 +64,7 @@ Base: `https://iot-api.iwhya.kr` (로컬 `http://127.0.0.1:8002`)
 }
 ```
 
-### POST body 예 (프리셋)
+### POST 예 (프리셋)
 
 ```json
 {
@@ -85,12 +76,11 @@ Base: `https://iot-api.iwhya.kr` (로컬 `http://127.0.0.1:8002`)
 }
 ```
 
-## 스케줄 워커 (NAS systemd)
-
-1분마다 1회 due 실행:
+## 워커 (NAS systemd)
 
 ```bash
 docker exec iot-api python -m app.cli.scheduler
 ```
 
-stdout JSON: `executed`, `skipped_duplicate`, `results[]`.
+stdout: `executed`, `skipped_duplicate`, `results[]`.  
+timer 설정: [strip/scheduler.md](../strip/scheduler.md)

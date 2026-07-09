@@ -46,7 +46,7 @@ curl -H "X-API-Key: YOUR_KEY" http://127.0.0.1:8002/api/v1/status
 - 컨테이너 기동 시 `alembic upgrade head` (`scripts/docker-entrypoint.sh`)
 - 스케줄 워커: `docker exec iot-api python -m app.cli.scheduler` (NAS systemd timer)
 
-상세: `.cursor/coordination/STRIP_API_v1.md`
+상세: `.cursor/coordination/api/strip.md`
 
 ## CI / 배포
 
