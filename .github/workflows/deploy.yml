@@ -119,6 +119,9 @@ jobs:
             echo "${IOT_API_IMAGE}" > .deploy-image
             echo "$(date -Iseconds) ${IOT_API_IMAGE}" >> .deploy-history.log
             export IOT_API_IMAGE
+            # 레거시 compose project(api=디렉터리명) 정리 — 포트·컨테이너 중복 방지
+            COMPOSE_PROJECT_NAME=api docker compose down 2>/dev/null || true
+            docker compose down || docker rm -f iot-api
             docker compose pull
             docker compose up -d
             ok=0

@@ -5,7 +5,7 @@
 `main` push → **CI pytest** → GHCR `:sha-XXXXXXX` + `:latest` → NAS SSH:
 
 1. `.deploy-image` 에 pin 된 `IOT_API_IMAGE` 기록
-2. `docker compose pull && up -d`
+2. 레거시 project `api` down → `COMPOSE_PROJECT_NAME=iot-api` 로 down → pull → up
 3. `/health` 확인
 
 NAS compose (`docker-compose.yml`):
@@ -29,6 +29,8 @@ tail -5 .deploy-history.log
 # 예: 이전 sha로 롤백
 export IOT_API_IMAGE=ghcr.io/ehwiya/home-assistant-back-end:sha-abc1234
 echo "$IOT_API_IMAGE" > .deploy-image
+COMPOSE_PROJECT_NAME=api docker compose down 2>/dev/null || true
+docker compose down || docker rm -f iot-api
 docker compose pull
 docker compose up -d
 curl -sf http://127.0.0.1:8002/health
@@ -38,6 +40,8 @@ curl -sf http://127.0.0.1:8002/health
 
 ```bash
 unset IOT_API_IMAGE
+COMPOSE_PROJECT_NAME=api docker compose down 2>/dev/null || true
+docker compose down || docker rm -f iot-api
 docker compose pull
 docker compose up -d
 ```
