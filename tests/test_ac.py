@@ -151,8 +151,18 @@ def test_ac_state_includes_consistency_metadata():
                 "S",
                 (),
                 {
-                    "plug": type("P", (), {"power_w": 10.0})(),
+                    "plug": type(
+                        "P",
+                        (),
+                        {
+                            "power_w": 10.0,
+                            "power_updated_at": "2026-07-14T23:30:00+09:00",
+                            "power_age_seconds": 12.0,
+                            "power_stale": False,
+                        },
+                    )(),
                     "ac_estimated_running": False,
+                    "ac_running_confidence": "medium",
                     "ac_auto_enabled": True,
                     "ac_away_enabled": False,
                     "ac_mode": "cool",
@@ -179,6 +189,10 @@ def test_ac_state_includes_consistency_metadata():
     assert payload["state_source"] == "composed(plug_w,ac_auto_state,ha_input_select)"
     assert payload["last_control_at"] is None
     assert payload["last_control_result"] is None
+    assert payload["power_stale"] is False
+    assert payload["power_updated_at"] == "2026-07-14T23:30:00+09:00"
+    assert payload["power_age_seconds"] == 12.0
+    assert payload["ac_running_confidence"] == "medium"
 
 
 def test_ac_post_operating_mode_auto_mutex():
@@ -264,28 +278,21 @@ def test_ac_thresholds_endpoint():
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["version"] == "v3.0"
-    assert "≥26°C" in data["home_auto"]["on"]
-    assert "15분" in data["home_auto"]["on"]
-    assert "<24°C" in data["home_auto"]["off"]
+    assert data["version"] == "v4.0"
+    assert "≥27°C" in data["home_auto"]["on"]
+    assert "26~26.5" in data["home_auto"]["on"]
+    assert "≥15W" in data["home_auto"]["on"]
     assert "<26°C" in data["home_auto"]["off"]
-    assert "OFF 후 재가동" in data["home_auto"]["on"]
-    assert ">26°C" in data["home_auto"]["on"]
+    assert "스마트 ON" in data["home_auto"]["on"]
     assert "냉방" in data["home_auto"]["on"]
     assert "제습" in data["home_auto"]["on"]
-    assert "스마트 ON" in data["home_auto"]["on"]
-    assert "v3.0" in data["home_auto"]["notes"]
+    assert "v4.0" in data["home_auto"]["notes"]
     assert "input_select=off" in data["home_auto"]["notes"]
-    assert "v3.0" in data["mutex"]
-    assert "27°C" in data["away"]["on"]
-    assert "60%" in data["away"]["on"]
-    assert "10분" in data["away"]["on"]
-    assert "26°C" in data["away"]["on"]
+    assert "v4.0" in data["mutex"]
+    assert "≥28°C" in data["away"]["on"]
+    assert "28" in data["away"]["on"]
+    assert "<28°C" in data["away"]["off"]
     assert "스마트 ON" in data["away"]["on"]
-    assert "냉방" in data["away"]["on"]
-    assert "제습" in data["away"]["on"]
-    assert "27°C" in data["away"]["off"]
-    assert "60%" in data["away"]["off"]
     assert data["away"]["on"] != data["home_auto"]["on"]
     assert data["away"]["off"] != data["home_auto"]["off"]
     assert "home_auto" in data
@@ -415,10 +422,20 @@ def _status_stub(*, power_w: float = 10.0, auto_state: str = "off", auto_enabled
         "S",
         (),
         {
-            "plug": type("P", (), {"power_w": power_w})(),
+            "plug": type(
+                "P",
+                (),
+                {
+                    "power_w": power_w,
+                    "power_stale": False,
+                    "power_updated_at": None,
+                    "power_age_seconds": None,
+                },
+            )(),
             "ac_auto_state": type("A", (), {"state": auto_state})(),
             "ac_auto_enabled": auto_enabled,
             "ac_away_enabled": False,
+            "ac_running_confidence": "high",
         },
     )()
 
@@ -588,12 +605,13 @@ def test_ac_state_inconsistent_when_automation_blocked():
             "S",
             (),
             {
-                "plug": type("P", (), {"power_w": 10.0})(),
+                "plug": type("P", (), {"power_w": 10.0, "power_stale": False})(),
                 "ac_auto_enabled": True,
                 "ac_away_enabled": False,
                 "ac_mode": "off",
                 "ac_last_run_mode": None,
                 "ac_auto_state": type("A", (), {"state": "off"})(),
+                "ac_running_confidence": "high",
                 "indoor": None,
             },
         )()

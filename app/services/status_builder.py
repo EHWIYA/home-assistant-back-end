@@ -31,6 +31,7 @@ from app.models.schemas import (
     AcLastRunMode,
     AcMode,
     AcOperatingMode,
+    AcRunningConfidence,
     ElectricityInfo,
     IndoorClimate,
     PcStatus,
@@ -46,10 +47,47 @@ AcPowerSource = Literal["plug", "logical"]
 AcPowerDisplay = Literal["on", "off"]
 AC_MODES: frozenset[str] = frozenset({"off", "auto", "cool", "dry"})
 AC_LAST_RUN_MODES: frozenset[str] = frozenset({"cool", "dry"})
+DEFAULT_AC_POWER_STALE_SECONDS = 600
 
 
 def _now_kst_iso() -> str:
     return datetime.now(KST).isoformat(timespec="seconds")
+
+
+def _parse_ha_datetime(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw or raw.lower() in ("unknown", "unavailable", "none"):
+        return None
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=KST)
+    return dt
+
+
+def _ha_datetime_to_kst_iso(dt: datetime) -> str:
+    return dt.astimezone(KST).isoformat(timespec="seconds")
+
+
+def build_plug_power_freshness(
+    plug_power_raw: dict[str, Any],
+    *,
+    stale_seconds: int = DEFAULT_AC_POWER_STALE_SECONDS,
+    now: datetime | None = None,
+) -> tuple[str | None, float | None, bool]:
+    """Return (power_updated_at KST ISO, power_age_seconds, power_stale)."""
+    updated = _parse_ha_datetime(
+        plug_power_raw.get("last_updated") or plug_power_raw.get("last_changed")
+    )
+    if updated is None:
+        return None, None, True
+    current = now if now is not None else datetime.now(KST)
+    age = max(0.0, (current - updated).total_seconds())
+    return _ha_datetime_to_kst_iso(updated), age, age >= stale_seconds
 
 
 def _parse_float(value: Any) -> float | None:
@@ -305,10 +343,11 @@ def ac_composite_running(
     *,
     ac_power_threshold_w: float,
     ac_auto_state: AcAutoState | None,
+    power_stale: bool = False,
 ) -> bool:
-    return ac_plug_running(power_w, ac_power_threshold_w=ac_power_threshold_w) or ac_logical_running(
-        ac_auto_state
-    )
+    if not power_stale and ac_plug_running(power_w, ac_power_threshold_w=ac_power_threshold_w):
+        return True
+    return ac_logical_running(ac_auto_state)
 
 
 def resolve_ac_power(
@@ -316,12 +355,29 @@ def resolve_ac_power(
     *,
     ac_power_threshold_w: float,
     ac_auto_state: AcAutoState | None,
+    power_stale: bool = False,
 ) -> tuple[AcPowerDisplay, AcPowerSource]:
-    if ac_plug_running(power_w, ac_power_threshold_w=ac_power_threshold_w):
+    if not power_stale and ac_plug_running(power_w, ac_power_threshold_w=ac_power_threshold_w):
         return "on", "plug"
     if ac_logical_running(ac_auto_state):
         return "on", "logical"
     return "off", "plug"
+
+
+def resolve_ac_running_confidence(
+    *,
+    power_stale: bool,
+    running_source: AcPowerSource,
+    power: AcPowerDisplay,
+) -> AcRunningConfidence:
+    if power_stale:
+        return "low"
+    if power == "on" and running_source == "plug":
+        return "high"
+    if power == "on" and running_source == "logical":
+        return "medium"
+    # fresh plug says off (or no W) and logical off
+    return "high"
 
 
 def _build_ac_auto_state(
@@ -352,6 +408,7 @@ def build_status_from_states(
     ac_power_threshold_w: float,
     pc_power_threshold_w: float,
     estimate_rate_won_per_kwh: float,
+    ac_power_stale_seconds: int = DEFAULT_AC_POWER_STALE_SECONDS,
 ) -> StatusResponse:
     plug_switch_raw = states.get(ENTITY_PLUG_SWITCH, {})
     plug_power_raw = states.get(ENTITY_PLUG_POWER, {})
@@ -361,14 +418,25 @@ def build_status_from_states(
     switch = _switch_state(plug_switch_raw.get("state"))
     power_w = _parse_float(plug_power_raw.get("state"))
     energy_kwh = _parse_float(plug_energy_raw.get("state"))
+    power_updated_at, power_age_seconds, power_stale = build_plug_power_freshness(
+        plug_power_raw,
+        stale_seconds=ac_power_stale_seconds,
+    )
 
     ac_auto_enabled = _build_ac_auto_enabled(states)
     ac_away_enabled = _build_ac_away_enabled(states)
     ac_auto_state = _build_ac_auto_state(states, last_run_mode=_build_ac_last_run_mode(states))
-    ac_running = ac_composite_running(
+    power_display, running_source = resolve_ac_power(
         power_w,
         ac_power_threshold_w=ac_power_threshold_w,
         ac_auto_state=ac_auto_state,
+        power_stale=power_stale,
+    )
+    ac_running = power_display == "on"
+    ac_running_confidence = resolve_ac_running_confidence(
+        power_stale=power_stale,
+        running_source=running_source,
+        power=power_display,
     )
 
     weather_attrs = weather_raw.get("attributes") or {}
@@ -386,6 +454,9 @@ def build_status_from_states(
             power_w=power_w,
             energy_kwh=energy_kwh,
             estimated_cost_won=_estimate_cost_won(energy_kwh, estimate_rate_won_per_kwh),
+            power_updated_at=power_updated_at,
+            power_age_seconds=power_age_seconds,
+            power_stale=power_stale,
         ),
         pc=_build_pc(
             states,
@@ -394,6 +465,7 @@ def build_status_from_states(
         ),
         electricity=ElectricityInfo(rate_won_per_kwh=estimate_rate_won_per_kwh),
         ac_estimated_running=ac_running,
+        ac_running_confidence=ac_running_confidence,
         ac_auto_enabled=ac_auto_enabled,
         ac_away_enabled=ac_away_enabled,
         ac_operating_mode=derive_ac_operating_mode(
@@ -416,4 +488,5 @@ async def fetch_and_build_status(ha: HAClient, settings: Settings) -> StatusResp
         ac_power_threshold_w=settings.ac_power_threshold_w,
         pc_power_threshold_w=settings.pc_power_threshold_w,
         estimate_rate_won_per_kwh=settings.estimate_rate_won_per_kwh,
+        ac_power_stale_seconds=settings.ac_power_stale_seconds,
     )

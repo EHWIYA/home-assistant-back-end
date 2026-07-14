@@ -53,16 +53,18 @@ def test_build_status_from_cache_matches_builder():
         ha_base_url="http://127.0.0.1:8123",
         ha_token="t",
         iot_api_key="k",
-        ac_power_threshold_w=50.0,
+        ac_power_threshold_w=15.0,
+        ac_power_stale_seconds=600,
         pc_power_threshold_w=50.0,
         estimate_rate_won_per_kwh=199.28,
     )
     from_cache = cache.build_status(settings)
     direct = build_status_from_states(
         states,
-        ac_power_threshold_w=50,
+        ac_power_threshold_w=15,
         pc_power_threshold_w=50,
         estimate_rate_won_per_kwh=199.28,
+        ac_power_stale_seconds=600,
     )
     assert from_cache.plug == direct.plug
     assert from_cache.pc == direct.pc

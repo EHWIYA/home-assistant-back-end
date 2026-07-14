@@ -1,7 +1,10 @@
+import copy
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.services.status_builder import (
+    build_plug_power_freshness,
     build_status_from_states,
     derive_ac_operating_mode,
     is_ac_automation_blocked,
@@ -14,11 +17,18 @@ ESTIMATE_RATE = 199.28
 
 
 def _build(states: dict, **overrides: float) -> object:
+    states = copy.deepcopy(states)
+    power = states.get("sensor.hwiya_home_power")
+    if isinstance(power, dict) and "last_updated" not in power:
+        now = datetime.now(timezone.utc).isoformat()
+        power["last_updated"] = now
+        power["last_changed"] = now
     return build_status_from_states(
         states,
-        ac_power_threshold_w=overrides.get("ac_power_threshold_w", 50),
+        ac_power_threshold_w=overrides.get("ac_power_threshold_w", 15),
         pc_power_threshold_w=overrides.get("pc_power_threshold_w", 50),
         estimate_rate_won_per_kwh=overrides.get("estimate_rate_won_per_kwh", ESTIMATE_RATE),
+        ac_power_stale_seconds=int(overrides.get("ac_power_stale_seconds", 600)),
     )
 
 
@@ -42,6 +52,10 @@ def test_build_status_from_fixture():
     assert status.pc.overload is False
     assert status.pc.estimated_running is True
     assert status.ac_estimated_running is True
+    assert status.ac_running_confidence == "high"
+    assert status.plug.power_stale is False
+    assert status.plug.power_updated_at is not None
+    assert status.plug.power_age_seconds is not None
     assert status.weather_outdoor is not None
     assert status.weather_outdoor.temperature == 18.2
     assert status.ac_auto_enabled is True
@@ -65,6 +79,7 @@ def test_ac_off_below_threshold():
     states["sensor.hwiya_ac_auto_state"]["state"] = "off"
     status = _build(states)
     assert status.ac_estimated_running is False
+    assert status.ac_running_confidence == "high"
 
 
 def test_ac_running_when_logical_on_below_plug_threshold():
@@ -73,6 +88,48 @@ def test_ac_running_when_logical_on_below_plug_threshold():
     states["sensor.hwiya_ac_auto_state"]["state"] = "on"
     status = _build(states)
     assert status.ac_estimated_running is True
+    assert status.ac_running_confidence == "medium"
+
+
+def test_ac_plug_running_at_15w_threshold():
+    states = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    states["sensor.hwiya_home_power"]["state"] = "15"
+    states["sensor.hwiya_ac_auto_state"]["state"] = "off"
+    status = _build(states, ac_power_threshold_w=15)
+    assert status.ac_estimated_running is True
+    assert status.ac_running_confidence == "high"
+
+
+def test_stale_plug_power_does_not_force_running():
+    states = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    old = (datetime.now(timezone.utc) - timedelta(seconds=900)).isoformat()
+    states["sensor.hwiya_home_power"]["last_updated"] = old
+    states["sensor.hwiya_home_power"]["last_changed"] = old
+    states["sensor.hwiya_home_power"]["state"] = "742.0"
+    states["sensor.hwiya_ac_auto_state"]["state"] = "off"
+    status = _build(states)
+    assert status.plug.power_stale is True
+    assert status.ac_estimated_running is False
+    assert status.ac_running_confidence == "low"
+
+
+def test_stale_plug_falls_back_to_logical():
+    states = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    old = (datetime.now(timezone.utc) - timedelta(seconds=900)).isoformat()
+    states["sensor.hwiya_home_power"]["last_updated"] = old
+    states["sensor.hwiya_home_power"]["state"] = "5"
+    states["sensor.hwiya_ac_auto_state"]["state"] = "on"
+    status = _build(states)
+    assert status.plug.power_stale is True
+    assert status.ac_estimated_running is True
+    assert status.ac_running_confidence == "low"
+
+
+def test_build_plug_power_freshness_missing_is_stale():
+    updated_at, age, stale = build_plug_power_freshness({})
+    assert updated_at is None
+    assert age is None
+    assert stale is True
 
 
 def test_pc_estimated_running_below_threshold():

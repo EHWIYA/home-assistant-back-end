@@ -27,6 +27,7 @@ iot-api와 **별도** NAS 서비스 (`iot-ac-push-svc`, `:18765`).
 |------|------|------|
 | [ac/auto-check.md](ac/auto-check.md) | 서버 | 회신 — IR·running_source |
 | [ac/thresholds-v2.md](ac/thresholds-v2.md) | 서버 | 회신 — 3모드 mutex |
+| [ac/thresholds-v4-stale.md](ac/thresholds-v4-stale.md) | 서버·프론트 | 회신 — freshness·v4 thresholds |
 | [api/strip.md](api/strip.md) | 프론트·서버 | Strip + Schedules 스펙 |
 | [api/weather.md](api/weather.md) | 프론트 | 회신 — `/weather/local` |
 | [strip/scheduler.md](strip/scheduler.md) | 서버 | Phase 2 timer 활성화 |

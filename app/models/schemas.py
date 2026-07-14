@@ -15,11 +15,32 @@ class HealthResponse(BaseModel):
     db_reachable: bool | None = None
 
 
+AcRunningConfidence = Literal["high", "medium", "low"]
+
+
 class PlugStatus(BaseModel):
     switch: Literal["on", "off", "unavailable", "unknown"]
     power_w: float | None = None
     energy_kwh: float | None = None
     estimated_cost_won: int | None = None
+    power_updated_at: str | None = Field(
+        default=None,
+        examples=["2026-07-14T23:30:00+09:00"],
+        description="HA sensor.hwiya_home_power last_updated (KST ISO8601). 없으면 null.",
+    )
+    power_age_seconds: float | None = Field(
+        default=None,
+        examples=[42.5],
+        description="power_updated_at 기준 경과 초. 파싱 불가·미수신 시 null.",
+    )
+    power_stale: bool = Field(
+        default=True,
+        examples=[False],
+        description=(
+            "True면 플러그 전력 관측이 오래되었거나(기본 600s) 시각을 알 수 없음. "
+            "이 경우 플러그 단독의 AC 켜짐/꺼짐 표시를 신뢰하지 말 것."
+        ),
+    )
 
 
 class PcStatus(BaseModel):
@@ -105,6 +126,14 @@ class StatusResponse(BaseModel):
     pc: PcStatus
     electricity: ElectricityInfo
     ac_estimated_running: bool
+    ac_running_confidence: AcRunningConfidence = Field(
+        default="low",
+        examples=["high"],
+        description=(
+            "AC 가동 추정 신뢰도. high=신선 플러그≥임계, medium=logical(auto_state), "
+            "low=power_stale 또는 둘 다 꺼짐·시각 미상. power_stale 시 UI는 ‘꺼짐’ 확정 금지."
+        ),
+    )
     ac_auto_enabled: bool | None = None
     ac_away_enabled: bool | None = None
     ac_operating_mode: AcOperatingMode | None = Field(
@@ -184,23 +213,66 @@ class AcAutoToggleResponse(BaseModel):
 
 
 class AcStateResponse(BaseModel):
-    power: Literal["on", "off"]
-    running_source: Literal["plug", "logical"]
+    power: Literal["on", "off"] = Field(
+        examples=["on"],
+        description=(
+            "표시용 가동. plug 신선+≥AC_POWER_THRESHOLD_W 이면 on(source=plug); "
+            "아니면 ac_auto_state=on 이면 on(source=logical); 둘 다 아니면 off. "
+            "power_stale=True면 플러그 W로 on 확정하지 않음(logical만)."
+        ),
+    )
+    running_source: Literal["plug", "logical"] = Field(
+        examples=["plug"],
+        description=(
+            "power 판정 근거. plug=홈 플러그 전력(신선·임계 이상). "
+            "logical=sensor.hwiya_ac_auto_state.on (플러그 미달·stale·unavailable 시)."
+        ),
+    )
     mode: AcMode
     auto_enabled: bool
     away_enabled: bool
     operating_mode: AcOperatingMode | None = None
     last_run_mode: AcLastRunMode | None = None
-    state_consistent: bool
+    state_consistent: bool = Field(
+        examples=[True],
+        description=(
+            "mode·power·ac_auto_state·auto/away mutex가 기대와 맞으면 true. "
+            "auto/away ON인데 input_select=off(자동화 차단)면 false. "
+            "최근 성공 제어 후 AC_STATE_RECONCILE_GRACE_SECONDS 안은 불일치여도 true 허용."
+        ),
+    )
     state_source: str
     last_control_at: str | None = None
     last_control_result: Literal["success", "failed"] | None = None
     temperature_c: float | None = None
     humidity: float | None = None
+    power_updated_at: str | None = Field(
+        default=None,
+        examples=["2026-07-14T23:30:00+09:00"],
+        description="plug.power_updated_at 와 동일 (홈 플러그 전력 센서).",
+    )
+    power_age_seconds: float | None = Field(
+        default=None,
+        examples=[42.5],
+        description="plug.power_age_seconds 와 동일.",
+    )
+    power_stale: bool = Field(
+        default=True,
+        examples=[False],
+        description="plug.power_stale 와 동일. True면 IR OFF/‘꺼짐’ UI 확정에 플러그만 쓰지 말 것.",
+    )
+    ac_running_confidence: AcRunningConfidence = Field(
+        default="low",
+        examples=["high"],
+        description=(
+            "가동 추정 신뢰도. high=신선 플러그, medium=logical, low=stale/미상. "
+            "low일 때 PWA는 ‘꺼짐’으로 단정하지 말 것."
+        ),
+    )
 
 
 class AcThresholdRule(BaseModel):
-    """HA automation 임계값 v3.0 요약 (ON≥26·OFF·재가동·스마트 ON). 실제 판정은 HA에서 수행."""
+    """HA automation 임계값 v4 요약 (ON≥27·26~26.5 제습·OFF<26·가동≥15W). 실제 판정은 HA에서 수행."""
 
     on: str
     off: str
@@ -208,7 +280,7 @@ class AcThresholdRule(BaseModel):
 
 
 class AcThresholdsResponse(BaseModel):
-    version: str = Field(default="v3.0", examples=["v3.0"])
+    version: str = Field(default="v4.0", examples=["v4.0"])
     home_auto: AcThresholdRule
     away: AcThresholdRule
     mutex: str = Field(

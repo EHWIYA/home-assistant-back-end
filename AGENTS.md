@@ -66,7 +66,7 @@
 
 `app/constants.py`: `switch.hwiya_home`, `sensor.hwiya_home_power`, `sensor.hwiya_home_energy`, `person.hwiya_ha`, `weather.forecast_jib`
 
-AC 추정: `power_w >= AC_POWER_THRESHOLD_W` (기본 50, 홈 플러그)
+AC 추정: `power_w >= AC_POWER_THRESHOLD_W` (기본 15, 홈 플러그). `power_stale`(기본 600s)면 플러그만으로 가동/꺼짐 확정하지 않음.
 PC 부하 추정: `status.pc.estimated_running` — `PC_POWER_THRESHOLD_W` (기본 50, Tapo `switch.hwiya_pc`)
 
 ## 배포 요약

@@ -19,7 +19,8 @@ def _settings() -> Settings:
         ha_base_url="http://127.0.0.1:8123",
         ha_token="test-token",
         iot_api_key="test-key",
-        ac_power_threshold_w=50.0,
+        ac_power_threshold_w=15.0,
+        ac_power_stale_seconds=600,
         pc_power_threshold_w=50.0,
         estimate_rate_won_per_kwh=199.28,
     )
@@ -27,11 +28,17 @@ def _settings() -> Settings:
 
 def _status_from_fixture() -> StatusResponse:
     states = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    states["sensor.hwiya_home_power"]["last_updated"] = now
+    states["sensor.hwiya_home_power"]["last_changed"] = now
     return build_status_from_states(
         states,
-        ac_power_threshold_w=50,
+        ac_power_threshold_w=15,
         pc_power_threshold_w=50,
         estimate_rate_won_per_kwh=199.28,
+        ac_power_stale_seconds=600,
     )
 
 

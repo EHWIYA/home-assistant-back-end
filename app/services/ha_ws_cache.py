@@ -65,6 +65,7 @@ class HAStateCache:
             ac_power_threshold_w=settings.ac_power_threshold_w,
             pc_power_threshold_w=settings.pc_power_threshold_w,
             estimate_rate_won_per_kwh=settings.estimate_rate_won_per_kwh,
+            ac_power_stale_seconds=settings.ac_power_stale_seconds,
         )
 
     def apply_state_dict(self, entity_id: str, state: dict[str, Any]) -> bool:

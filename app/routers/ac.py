@@ -43,6 +43,7 @@ from app.services.status_builder import (
     is_ac_automation_blocked,
     resolve_ac_mutex_toggles,
     resolve_ac_power,
+    resolve_ac_running_confidence,
     resolve_ha_ac_mode,
 )
 
@@ -180,11 +181,13 @@ async def _toggle_ac_away(ha: HAClient, enabled: bool) -> None:
 def _ac_is_running_from_status(status: object, *, ac_power_threshold_w: float) -> bool:
     plug = getattr(status, "plug", None)
     power_w = getattr(plug, "power_w", None) if plug is not None else None
+    power_stale = bool(getattr(plug, "power_stale", False)) if plug is not None else False
     ac_auto_state = getattr(status, "ac_auto_state", None)
     return ac_composite_running(
         power_w,
         ac_power_threshold_w=ac_power_threshold_w,
         ac_auto_state=ac_auto_state,
+        power_stale=power_stale,
     )
 
 
@@ -278,44 +281,45 @@ async def _toggle_ac_auto_enabled(
     return _switch_state(plug_state.get("state"))
 
 
-_SMART_ON_NOTE = "스마트 ON(모드 auto): >26°C 냉방, ≤26°C 제습"
+_SMART_ON_NOTE = "스마트 ON(모드 auto): ≥27°C 냉방, 26~26.5°C 제습, <26°C OFF"
 
 
 @router.get(
     "/ac/thresholds",
     response_model=AcThresholdsResponse,
-    summary="에어컨 자동/외출 임계값 v3.0 (HA automation 정본)",
+    summary="에어컨 자동/외출 임계값 v4.0 (HA automation 정본)",
 )
 async def get_ac_thresholds(_key: ApiKeyDep) -> AcThresholdsResponse:
     return AcThresholdsResponse(
-        version="v3.0",
+        version="v4.0",
         home_auto=AcThresholdRule(
             on=(
-                "실내 ≥26°C(15분, OFF 후 재가동); "
+                "실내 ≥27°C 냉방 ON; 26~26.5°C 제습; 가동 판정 ≥15W; "
                 f"{_SMART_ON_NOTE}"
             ),
-            off="온도 <24°C 또는 (습도 OFF·온 <26°C)",
+            off="실내 <26°C OFF",
             notes=(
-                "자동 모드(input_boolean.hwiya_ac_auto_enabled ON) 시 HA automation v3.0 적용; "
+                "자동 모드(input_boolean.hwiya_ac_auto_enabled ON) 시 HA automation v4.0 적용; "
                 "input_select=off일 때만 auto·away OFF(cool/dry 시 auto 유지); "
-                "수동 cool/dry: 스마트 ON만 해당(센서 자동 ON/OFF 미적용)"
+                "수동 cool/dry: 스마트 ON만 해당(센서 자동 ON/OFF 미적용); "
+                "플러그 전력 신선도(power_stale) 참고"
             ),
         ),
         away=AcThresholdRule(
             on=(
-                "실내 27°C 이상 즉시, 또는 습도 60% 이상 10분(실내 26°C 이상); "
-                "스마트 ON(모드 auto): 26°C 초과 냉방, 26°C 이하 제습"
+                "실내 ≥28°C 즉시 ON; "
+                f"{_SMART_ON_NOTE}"
             ),
-            off="실내 27°C 미만이고 습도 60% 미만",
+            off="실내 <28°C OFF",
             notes=(
-                "외출 모드(input_boolean.hwiya_ac_away_enabled ON) 시 HA automation v3.0 적용; "
+                "외출 모드(input_boolean.hwiya_ac_away_enabled ON) 시 HA automation v4.0 적용; "
                 "input_select=off일 때만 auto·away OFF(cool/dry 시 auto 유지); "
                 "수동 cool/dry: 스마트 ON만 해당"
             ),
         ),
         mutex=(
             "input_select=off 시만 input_boolean auto·away OFF; "
-            "cool/dry 선택 시 hwiya_ac_auto_enabled 유지 — HA automation v3.0"
+            "cool/dry 선택 시 hwiya_ac_auto_enabled 유지 — HA automation v4.0"
         ),
     )
 
@@ -328,10 +332,12 @@ async def get_ac_state(
     status = await fetch_status(settings)
 
     mode = status.ac_mode
+    power_stale = bool(getattr(status.plug, "power_stale", False))
     power, running_source = resolve_ac_power(
         status.plug.power_w,
         ac_power_threshold_w=settings.ac_power_threshold_w,
         ac_auto_state=status.ac_auto_state,
+        power_stale=power_stale,
     )
     auto_enabled = bool(status.ac_auto_enabled)
     away_enabled = bool(status.ac_away_enabled)
@@ -348,6 +354,13 @@ async def get_ac_state(
     )
     temperature_c = status.indoor.temperature if status.indoor else None
     humidity = status.indoor.humidity if status.indoor else None
+    ac_running_confidence = getattr(status, "ac_running_confidence", None)
+    if ac_running_confidence not in {"high", "medium", "low"}:
+        ac_running_confidence = resolve_ac_running_confidence(
+            power_stale=power_stale,
+            running_source=running_source,
+            power=power,
+        )
 
     return AcStateResponse(
         power=power,
@@ -366,6 +379,10 @@ async def get_ac_state(
         last_control_result=last_control.get("result") if last_control else None,
         temperature_c=temperature_c,
         humidity=humidity,
+        power_updated_at=getattr(status.plug, "power_updated_at", None),
+        power_age_seconds=getattr(status.plug, "power_age_seconds", None),
+        power_stale=power_stale,
+        ac_running_confidence=ac_running_confidence,
     )
 
 
@@ -571,6 +588,7 @@ async def set_ac(
         status.plug.power_w,
         ac_power_threshold_w=settings.ac_power_threshold_w,
         ac_auto_state=status.ac_auto_state,
+        power_stale=bool(getattr(status.plug, "power_stale", False)),
     )
     toggled_mutex = (
         body.operating_mode is not None
