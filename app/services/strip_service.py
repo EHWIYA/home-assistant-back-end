@@ -122,6 +122,16 @@ class StripService:
 
         return await self.get_state()
 
+    async def update_channel_label(self, channel_number: int, label: str | None) -> dict:
+        _, channels = await self._get_device_with_channels()
+        channel = next((c for c in channels if c.channel_number == channel_number), None)
+        if channel is None:
+            raise HejhomeError(f"Invalid channel: {channel_number}", status_code=400, code="invalid_channel")
+
+        channel.label = label
+        await self._session.commit()
+        return await self.get_state()
+
     def _validate_preset_channels(self, channels: dict) -> dict[str, bool]:
         if not channels:
             raise HejhomeError("channels must not be empty", status_code=400, code="invalid_preset")

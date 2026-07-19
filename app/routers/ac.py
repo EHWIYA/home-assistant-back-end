@@ -16,9 +16,13 @@ from app.constants import (
     ENTITY_AC_LAST_OFF,
     ENTITY_AC_LAST_ON,
     ENTITY_AC_MODE,
+    ENTITY_AC_PLUG_CUT_SAFE,
     ENTITY_AC_REMOTE,
+    ENTITY_AC_SCRIPT_MANUAL_TURN_OFF,
     ENTITY_AC_SCRIPT_SMART_ON,
     ENTITY_AC_SCRIPT_TURN_OFF,
+    ENTITY_AC_SOFT_OFF,
+    ENTITY_PLUG_POWER,
     ENTITY_PLUG_SWITCH,
 )
 from app.deps import ApiKeyDep, SettingsDep
@@ -29,6 +33,8 @@ from app.models.schemas import (
     AcAutoToggleResponse,
     AcMode,
     AcOperatingMode,
+    AcRecoverRequest,
+    AcRecoverResponse,
     AcStateResponse,
     AcThresholdRule,
     AcThresholdsResponse,
@@ -228,6 +234,75 @@ async def _invoke_ac_turn_off_script(ha: HAClient) -> None:
     )
 
 
+async def _invoke_ac_manual_turn_off(ha: HAClient) -> None:
+    """수동/PWA OFF — 온도·가동 조건 없는 IR ac_off (자동용 turn_off 스크립트와 분리)."""
+    await ha.call_service(
+        "script",
+        "turn_on",
+        {"entity_id": ENTITY_AC_SCRIPT_MANUAL_TURN_OFF},
+    )
+
+
+async def _ensure_plug_on_for_ir(ha: HAClient, *, request_id: str) -> None:
+    """IR 송신 전 — 콘센트가 명시적으로 OFF일 때만 ON. (unknown이면 강제하지 않음)"""
+    plug_state = await ha.get_state(ENTITY_PLUG_SWITCH)
+    switch = _switch_state(plug_state.get("state"))
+    if switch == "on":
+        return
+    if switch != "off":
+        logger.warning(
+            "ac plug ensure skip request_id=%s plug_switch=%s",
+            request_id,
+            switch,
+        )
+        return
+    try:
+        await ha.call_service(
+            "switch",
+            "turn_on",
+            {"entity_id": ENTITY_PLUG_SWITCH},
+        )
+    except Exception as exc:
+        logger.error(
+            "ac plug ensure-on failed request_id=%s error=%s",
+            request_id,
+            exc,
+        )
+        _raise_ac_http_error(
+            request_id=request_id,
+            detail="AC plug must be on before IR; plug turn_on failed",
+            code="ac_plug_ensure_failed",
+        )
+
+
+async def _ha_bool_on(ha: HAClient, entity_id: str) -> bool | None:
+    raw = await ha.get_state(entity_id)
+    state = str(raw.get("state") or "").strip().lower()
+    if state in {"on", "true"}:
+        return True
+    if state in {"off", "false"}:
+        return False
+    return None
+
+
+async def _read_soft_off_flags(ha: HAClient, *, ac_power_threshold_w: float) -> tuple[bool, bool]:
+    """soft-off/plug_cut_safe HA 이진 센서 우선, 미기동 시 전력으로 폴백."""
+    soft = await _ha_bool_on(ha, ENTITY_AC_SOFT_OFF)
+    cut = await _ha_bool_on(ha, ENTITY_AC_PLUG_CUT_SAFE)
+    if soft is not None and cut is not None:
+        return soft, cut
+    power_raw = await ha.get_state(ENTITY_PLUG_POWER)
+    try:
+        power_w = float(power_raw.get("state"))
+    except (TypeError, ValueError):
+        return False, False
+    soft_off = power_w < ac_power_threshold_w
+    plug_state = await ha.get_state(ENTITY_PLUG_SWITCH)
+    switch = _switch_state(plug_state.get("state"))
+    plug_cut_safe = switch != "on" or soft_off
+    return soft_off, plug_cut_safe
+
+
 async def _toggle_ac_auto_enabled(
     ha: HAClient,
     *,
@@ -362,6 +437,12 @@ async def get_ac_state(
             power=power,
         )
 
+    ha = HAClient(settings)
+    soft_off, plug_cut_safe = await _read_soft_off_flags(
+        ha,
+        ac_power_threshold_w=settings.ac_power_threshold_w,
+    )
+
     return AcStateResponse(
         power=power,
         running_source=running_source,
@@ -383,6 +464,8 @@ async def get_ac_state(
         power_age_seconds=getattr(status.plug, "power_age_seconds", None),
         power_stale=power_stale,
         ac_running_confidence=ac_running_confidence,
+        soft_off=soft_off,
+        plug_cut_safe=plug_cut_safe,
     )
 
 
@@ -418,9 +501,11 @@ async def set_ac(
     )
 
     try:
-        if body.mode == "off":
-            await _invoke_ac_turn_off_script(ha)
+        if body.mode == "off" and ha_mode == "off":
+            await _ensure_plug_on_for_ir(ha, request_id=request_id)
+            await _invoke_ac_manual_turn_off(ha)
         elif body.mode == "cool":
+            await _ensure_plug_on_for_ir(ha, request_id=request_id)
             await ha.call_service(
                 "remote",
                 "send_command",
@@ -431,6 +516,7 @@ async def set_ac(
                 },
             )
         elif body.mode == "dry":
+            await _ensure_plug_on_for_ir(ha, request_id=request_id)
             await ha.call_service(
                 "remote",
                 "send_command",
@@ -440,6 +526,8 @@ async def set_ac(
                     "command": AC_COMMAND_DRY_PRESET_17,
                 },
             )
+    except HTTPException:
+        raise
     except Exception as exc:
         _remember_control(ha_mode, "failed")
         logger.error(
@@ -538,7 +626,10 @@ async def set_ac(
         status_auto_enabled=initial_status.ac_auto_enabled,
     ):
         try:
+            await _ensure_plug_on_for_ir(ha, request_id=request_id)
             await _invoke_ac_smart_on(ha)
+        except HTTPException:
+            raise
         except Exception as exc:
             _remember_control(ha_mode, "failed")
             logger.error(
@@ -661,4 +752,102 @@ async def set_ac_auto(
         request_id=request_id,
         auto_enabled=body.enabled,
         plug_switch=switch,
+    )
+
+
+@router.post("/ac/recover", response_model=AcRecoverResponse)
+async def recover_ac(
+    _key: ApiKeyDep,
+    settings: SettingsDep,
+    response: Response,
+    body: AcRecoverRequest = AcRecoverRequest(),
+    x_request_id: str | None = Header(default=None, alias="X-Request-ID"),
+) -> AcRecoverResponse:
+    """IR/상태 자가진단 수동 복구. 콘센트 ON → IR 재송신 → soft_off 플래그 반환."""
+    request_id = x_request_id or str(uuid4())
+    response.headers["X-Request-ID"] = request_id
+    force = body.force_ir or "auto"
+    ha = HAClient(settings)
+    steps: list[str] = []
+    chosen = force
+
+    try:
+        await _ensure_plug_on_for_ir(ha, request_id=request_id)
+        steps.append("plug_ensure_on")
+
+        status = await fetch_status(settings)
+        temp = status.indoor.temperature if status.indoor else None
+        was_running = _ac_is_running_from_status(
+            status,
+            ac_power_threshold_w=settings.ac_power_threshold_w,
+        )
+        if force == "auto":
+            t = temp if temp is not None else -99.0
+            if was_running and t < 26.0:
+                chosen = "off"
+            elif not was_running and t >= 27.0:
+                chosen = "cool"
+            elif was_running and 26.0 <= t < 26.5:
+                chosen = "dry"
+            elif not was_running:
+                chosen = "cool" if t >= 27.0 else "dry"
+            else:
+                chosen = "cool" if t >= 27.0 else ("dry" if t >= 26.0 else "off")
+
+        if chosen == "off":
+            await _invoke_ac_manual_turn_off(ha)
+            steps.append("ir_manual_off")
+        elif chosen == "dry":
+            await ha.call_service(
+                "remote",
+                "send_command",
+                {
+                    "entity_id": ENTITY_AC_REMOTE,
+                    "device": AC_REMOTE_DEVICE,
+                    "command": AC_COMMAND_DRY_PRESET_17,
+                },
+            )
+            steps.append("ir_dry")
+        elif chosen == "smart":
+            await _invoke_ac_smart_on(ha)
+            steps.append("ir_smart_on")
+        else:
+            await ha.call_service(
+                "remote",
+                "send_command",
+                {
+                    "entity_id": ENTITY_AC_REMOTE,
+                    "device": AC_REMOTE_DEVICE,
+                    "command": AC_COMMAND_COOL_PRESET_17,
+                },
+            )
+            steps.append("ir_cool")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("ac recover failed request_id=%s error=%s", request_id, exc)
+        _raise_ac_http_error(
+            request_id=request_id,
+            detail="AC recover failed",
+            code="ac_recover_failed",
+        )
+
+    soft_off, plug_cut_safe = await _read_soft_off_flags(
+        ha,
+        ac_power_threshold_w=settings.ac_power_threshold_w,
+    )
+    power_raw = await ha.get_state(ENTITY_PLUG_POWER)
+    try:
+        power_w = float(power_raw.get("state"))
+    except (TypeError, ValueError):
+        power_w = None
+
+    return AcRecoverResponse(
+        request_id=request_id,
+        chosen_ir=chosen,
+        steps=steps,
+        soft_off=soft_off,
+        plug_cut_safe=plug_cut_safe,
+        power_w=power_w,
+        detail="plug on + IR re-send; use soft_off/plug_cut_safe for plug OFF gate",
     )

@@ -139,14 +139,43 @@ def _fahrenheit_to_celsius(fahrenheit: float) -> float:
     return round((fahrenheit - 32) * 5 / 9, 1)
 
 
+def _is_fahrenheit_unit(unit: str | None) -> bool:
+    u = str(unit or "").strip().upper().replace("º", "°")
+    return u in ("°F", "F", "FAHRENHEIT")
+
+
+def _is_celsius_unit(unit: str | None) -> bool:
+    u = str(unit or "").strip().upper().replace("º", "°")
+    return u in ("°C", "C", "CELSIUS")
+
+
 def _temperature_celsius(raw: dict[str, Any]) -> float | None:
     value = _parse_float(raw.get("state"))
     if value is None:
         return None
-    unit = str((raw.get("attributes") or {}).get("unit_of_measurement", "")).strip().upper()
-    if unit in ("°C", "C"):
+    unit = str((raw.get("attributes") or {}).get("unit_of_measurement", "")).strip()
+    if _is_celsius_unit(unit):
         return round(value, 1)
+    if _is_fahrenheit_unit(unit):
+        return _fahrenheit_to_celsius(value)
+    # unit 미상·비어 있으면 기존 관례(센서 °F 폴백) 유지
     return _fahrenheit_to_celsius(value)
+
+
+def _weather_temperature_celsius(attrs: dict[str, Any]) -> float | None:
+    """HA weather.* — attributes.temperature + temperature_unit → °C."""
+    value = _parse_float(attrs.get("temperature"))
+    if value is None:
+        return None
+    unit = attrs.get("temperature_unit")
+    if _is_celsius_unit(unit if isinstance(unit, str) else None):
+        return round(value, 1)
+    if _is_fahrenheit_unit(unit if isinstance(unit, str) else None):
+        return _fahrenheit_to_celsius(value)
+    # unit 없으면 값 범위로 추정 (한여름 실외 °C는 보통 <50)
+    if value > 50:
+        return _fahrenheit_to_celsius(value)
+    return round(value, 1)
 
 
 def _build_indoor(states: dict[str, dict[str, Any]]) -> IndoorClimate | None:
@@ -443,7 +472,7 @@ def build_status_from_states(
     weather: WeatherOutdoor | None = None
     if weather_raw:
         weather = WeatherOutdoor(
-            temperature=_parse_float(weather_attrs.get("temperature")),
+            temperature=_weather_temperature_celsius(weather_attrs),
             humidity=weather_attrs.get("humidity"),
             condition=weather_attrs.get("condition") or weather_raw.get("state"),
         )

@@ -3,6 +3,7 @@ from fastapi import APIRouter, Path
 from app.deps import ApiKeyDep, StripServiceDep
 from app.models.schemas import (
     StripChannelActionRequest,
+    StripChannelLabelRequest,
     StripPresetApplyResponse,
     StripPresetCreateRequest,
     StripPresetListResponse,
@@ -31,6 +32,17 @@ async def strip_channel_control(
     channel: int = Path(ge=1, le=4),
 ) -> StripStateResponse:
     data = await service.set_channel(channel, on=body.on)
+    return StripStateResponse(**data)
+
+
+@router.patch("/channels/{channel}/label", response_model=StripStateResponse)
+async def strip_channel_label(
+    body: StripChannelLabelRequest,
+    _key: ApiKeyDep,
+    service: StripServiceDep,
+    channel: int = Path(ge=1, le=4),
+) -> StripStateResponse:
+    data = await service.update_channel_label(channel, body.label)
     return StripStateResponse(**data)
 
 

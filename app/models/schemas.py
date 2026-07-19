@@ -269,6 +269,32 @@ class AcStateResponse(BaseModel):
             "low일 때 PWA는 ‘꺼짐’으로 단정하지 말 것."
         ),
     )
+    soft_off: bool | None = Field(
+        default=None,
+        description="전력 < 가동임계 → IR soft-off 확인. 콘센트 OFF 게이트 1차.",
+    )
+    plug_cut_safe: bool | None = Field(
+        default=None,
+        description="true일 때만 POST /plug action=off 허용 (가동 중 hard-cut 방지).",
+    )
+
+
+class AcRecoverRequest(BaseModel):
+    force_ir: Literal["auto", "off", "cool", "dry", "smart"] | None = Field(
+        default="auto",
+        description="수동 복구 IR. auto=온도·가동 기준 선택.",
+    )
+
+
+class AcRecoverResponse(BaseModel):
+    ok: bool = True
+    request_id: str | None = None
+    chosen_ir: str | None = None
+    steps: list[str] = Field(default_factory=list)
+    soft_off: bool | None = None
+    plug_cut_safe: bool | None = None
+    power_w: float | None = None
+    detail: str | None = None
 
 
 class AcThresholdRule(BaseModel):
@@ -317,6 +343,14 @@ class StripStateResponse(BaseModel):
 
 class StripChannelActionRequest(BaseModel):
     on: bool
+
+
+class StripChannelLabelRequest(BaseModel):
+    label: str | None = Field(
+        default=None,
+        max_length=64,
+        description="채널 라벨. null이면 라벨 삭제.",
+    )
 
 
 class StripPresetApplyResponse(BaseModel):
