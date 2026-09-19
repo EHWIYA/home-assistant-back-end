@@ -178,6 +178,10 @@ class PcActionResponse(BaseModel):
     switch: Literal["on", "off", "unavailable", "unknown"]
 
 
+class PcWakeResponse(BaseModel):
+    ok: bool = True
+
+
 class AcActionRequest(BaseModel):
     mode: AcMode
     auto_enabled: bool | None = None
