@@ -51,6 +51,13 @@ class PcStatus(BaseModel):
     estimated_cost_today_won: int | None = None
     estimated_cost_month_won: int | None = None
     online: bool
+    network_reachable: bool = Field(
+        default=False,
+        description=(
+            "True면 HA ping binary_sensor가 PC의 LAN 응답을 확인함. "
+            "Tapo cloud online이나 콘센트·전력 상태와 별개."
+        ),
+    )
     wifi_signal_level: int | None = None
     overload: bool
     estimated_running: bool

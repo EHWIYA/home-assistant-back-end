@@ -3,6 +3,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from app.constants import ENTITY_PC_NETWORK_REACHABLE
 from app.services.status_builder import (
     build_plug_power_freshness,
     build_status_from_states,
@@ -48,6 +49,7 @@ def test_build_status_from_fixture():
     assert status.pc.estimated_cost_month_won == 628
     assert status.electricity.rate_won_per_kwh == ESTIMATE_RATE
     assert status.pc.online is True
+    assert status.pc.network_reachable is False
     assert status.pc.wifi_signal_level == 3
     assert status.pc.overload is False
     assert status.pc.estimated_running is True
@@ -150,8 +152,34 @@ def test_pc_defaults_when_entities_missing():
     assert status.pc.estimated_cost_today_won is None
     assert status.pc.estimated_cost_month_won is None
     assert status.pc.online is False
+    assert status.pc.network_reachable is False
     assert status.pc.overload is False
     assert status.pc.estimated_running is False
+
+
+def test_pc_network_reachable_is_independent_from_existing_pc_fields():
+    states = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    states[ENTITY_PC_NETWORK_REACHABLE] = {
+        "entity_id": ENTITY_PC_NETWORK_REACHABLE,
+        "state": "on",
+    }
+    status = _build(states)
+
+    assert status.pc.network_reachable is True
+    assert status.pc.online is True
+    assert status.pc.switch == "on"
+    assert status.pc.power_w == 85.5
+    assert status.pc.estimated_running is True
+
+
+def test_pc_network_unusable_states_are_not_reachable():
+    states = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    for raw_state in ("off", "unavailable", "unknown"):
+        states[ENTITY_PC_NETWORK_REACHABLE] = {
+            "entity_id": ENTITY_PC_NETWORK_REACHABLE,
+            "state": raw_state,
+        }
+        assert _build(states).pc.network_reachable is False
 
 
 def test_unavailable_power_is_null():

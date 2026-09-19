@@ -16,6 +16,7 @@ from app.constants import (
     ENTITY_PC_CLOUD,
     ENTITY_PC_ENERGY_MONTH,
     ENTITY_PC_ENERGY_TODAY,
+    ENTITY_PC_NETWORK_REACHABLE,
     ENTITY_PC_OVERLOAD,
     ENTITY_PC_POWER,
     ENTITY_PC_SIGNAL,
@@ -205,6 +206,7 @@ def _build_pc(
     energy_today_raw = states.get(ENTITY_PC_ENERGY_TODAY, {})
     energy_month_raw = states.get(ENTITY_PC_ENERGY_MONTH, {})
     cloud_raw = states.get(ENTITY_PC_CLOUD, {})
+    network_raw = states.get(ENTITY_PC_NETWORK_REACHABLE, {})
     signal_raw = states.get(ENTITY_PC_SIGNAL, {})
     overload_raw = states.get(ENTITY_PC_OVERLOAD, {})
 
@@ -222,6 +224,7 @@ def _build_pc(
         estimated_cost_today_won=_estimate_cost_won(energy_today_kwh, estimate_rate_won_per_kwh),
         estimated_cost_month_won=_estimate_cost_won(energy_month_kwh, estimate_rate_won_per_kwh),
         online=_binary_is_on(cloud_raw.get("state")),
+        network_reachable=_binary_is_on(network_raw.get("state")),
         wifi_signal_level=_parse_int(signal_raw.get("state")),
         overload=_binary_is_on(overload_raw.get("state")),
         estimated_running=estimated_running,
