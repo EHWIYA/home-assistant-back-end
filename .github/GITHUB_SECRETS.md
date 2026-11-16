@@ -2,7 +2,7 @@
 
 **Settings → Secrets and variables → Actions → Repository secrets**
 
-NAS `.env`는 **NAS `/home/iwh/iot/api/.env`만** (서버 관리). Actions Secret 아님.
+NAS `.env`는 **NAS `/home/iwh/apps/iot/api/.env`만** (서버 관리). Actions Secret 아님.
 
 ---
 
@@ -16,6 +16,12 @@ NAS `.env`는 **NAS `/home/iwh/iot/api/.env`만** (서버 관리). Actions Secre
 | `NAS_SSH_KEY` | `github_actions_deploy` **private key** 전체 |
 
 **순서:** workflow에서 **Tailscale connect → SSH**. `tailscale up` 없이 `100.x:22` SSH 시 timeout.
+
+Repository variable `NAS_SSH_HOST_KEYS`에는 NAS에서 별도 확인한 SSH host 공개 키를
+`nas-iot-approved <algorithm> <public-key>` 형식으로 등록한다. 여러 알고리즘은 줄로 구분한다.
+private key를 이 변수에 넣지 않는다. CI는 HostKeyAlias와 StrictHostKeyChecking으로 이를
+대조하며 누락/불일치 시 배포를 거부한다. 전용 배포 키의 forced command는 NAS 공통
+로그 보존·정비 gate를 실행하므로 임의 셸/Compose 스크립트를 전달하지 않는다.
 
 ---
 

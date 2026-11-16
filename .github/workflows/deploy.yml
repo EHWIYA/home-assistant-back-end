@@ -13,13 +13,23 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      verify_current:
+        description: Build and prepare the candidate, but redeploy the current production image
+        type: boolean
+        default: false
+
+concurrency:
+  group: iot-api-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 env:
   REGISTRY: ghcr.io
   # github.repository = Owner/repo — Docker·GHCR 는 소문자만 허용
   IMAGE_NAME: ${{ github.repository }}
-  NAS_APP_DIR: /home/iwh/iot/api
-  COMPOSE_PROJECT_NAME: iot-api
 
 jobs:
   test:
@@ -73,13 +83,8 @@ jobs:
             type=sha,prefix=sha-,format=short
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Set deploy image ref
-        id: image
-        run: |
-          short="${GITHUB_SHA::7}"
-          echo "ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:sha-${short}" >> "$GITHUB_OUTPUT"
-
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -87,8 +92,14 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
+      - name: Set immutable deploy image ref
+        id: image
+        run: |
+          echo "ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}@${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
+
   deploy-nas:
     name: NAS docker compose deploy
+    timeout-minutes: 20
     needs: build-and-push
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
@@ -99,44 +110,27 @@ jobs:
         with:
           authkey: ${{ secrets.TS_AUTH_KEY }}
 
-      - name: SSH pull up and health
-        uses: appleboy/ssh-action@v1.2.0
+      - name: Deploy through NAS log preservation and maintenance gate
         env:
-          IOT_API_IMAGE: ${{ needs.build-and-push.outputs.image_ref }}
-        with:
-          host: ${{ secrets.NAS_HOST }}
-          username: ${{ secrets.NAS_SSH_USER }}
-          key: ${{ secrets.NAS_SSH_KEY }}
-          timeout: 60s
-          command_timeout: 10m
-          script_stop: true
-          envs: IOT_API_IMAGE
-          script: |
-            set -e
-            export COMPOSE_PROJECT_NAME=${{ env.COMPOSE_PROJECT_NAME }}
-            cd ${{ env.NAS_APP_DIR }}
-            echo "Deploying ${IOT_API_IMAGE}"
-            echo "${IOT_API_IMAGE}" > .deploy-image
-            echo "$(date -Iseconds) ${IOT_API_IMAGE}" >> .deploy-history.log
-            export IOT_API_IMAGE
-            # 레거시 compose project(api=디렉터리명) 정리 — 포트·컨테이너 중복 방지
-            COMPOSE_PROJECT_NAME=api docker compose down 2>/dev/null || true
-            docker compose down || docker rm -f iot-api
-            docker compose pull
-            docker compose up -d
-            ok=0
-            for i in $(seq 1 15); do
-              if curl -sf --connect-timeout 3 --max-time 10 http://127.0.0.1:8002/health; then
-                ok=1
-                break
-              fi
-              sleep 2
-            done
-            if [ "$ok" -ne 1 ]; then
-              echo "health check failed after compose up"
-              docker compose ps
-              docker compose logs --tail 80 iot-api
-              exit 1
-            fi
-            echo ""
-            echo "health OK — image ${IOT_API_IMAGE}"
+          NAS_HOST: ${{ secrets.NAS_HOST }}
+          NAS_SSH_USER: ${{ secrets.NAS_SSH_USER }}
+          NAS_SSH_KEY: ${{ secrets.NAS_SSH_KEY }}
+          NAS_SSH_HOST_KEYS: ${{ vars.NAS_SSH_HOST_KEYS }}
+          TARGET_IMAGE: ${{ needs.build-and-push.outputs.image_ref }}
+          VERIFY_CURRENT: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_current && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          umask 077
+          key_file="$RUNNER_TEMP/iot-api-deploy-key"
+          hosts_file="$RUNNER_TEMP/iot-api-known-hosts"
+          trap 'rm -f -- "$key_file" "$hosts_file"' EXIT
+          test -n "$NAS_SSH_KEY"
+          test -n "$NAS_SSH_HOST_KEYS"
+          printf '%s\n' "$NAS_SSH_KEY" > "$key_file"
+          printf '%s\n' "$NAS_SSH_HOST_KEYS" > "$hosts_file"
+          operation=iot-api-deploy
+          if [ "$VERIFY_CURRENT" = true ]; then operation=iot-api-verify; fi
+          ssh -i "$key_file" -o BatchMode=yes -o IdentitiesOnly=yes \
+            -o HostKeyAlias=nas-iot-approved -o UserKnownHostsFile="$hosts_file" \
+            -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
+            "$NAS_SSH_USER@$NAS_HOST" "$operation $TARGET_IMAGE $GITHUB_SHA $GITHUB_RUN_ID"
