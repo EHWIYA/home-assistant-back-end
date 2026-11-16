@@ -541,10 +541,7 @@ def test_ac_state_flags_inconsistent_when_auto_enabled_but_mode_off():
 
 
 def test_ac_post_mode_off_wins_over_operating_mode_mutex():
-    """v4: 물리 mode=off는 operating_mode 뮤텍스로 덮어쓰지 않음(HA automation v4.0 정본).
-
-    mutex(auto_enabled) 토글은 별도로 여전히 적용되지만, IR/input_select는 off로 유지된다.
-    """
+    """운영 보호 규칙: 수동 끄기는 IR과 auto·away를 모두 해제한다."""
     app, settings = _app_with_key()
     with patch("app.routers.ac.HAClient") as mock_cls:
         mock_ha = mock_cls.return_value
@@ -586,7 +583,14 @@ def test_ac_post_mode_off_wins_over_operating_mode_mutex():
         if c.args[:2] == ("input_boolean", "turn_on")
         and c.args[2].get("entity_id") == ENTITY_AC_AUTO_ENABLED
     ]
-    assert auto_on_calls
+    assert not auto_on_calls
+    disabled = {
+        c.args[2].get("entity_id")
+        for c in mock_ha.call_service.await_args_list
+        if c.args[:2] == ("input_boolean", "turn_off")
+    }
+    assert {ENTITY_AC_AUTO_ENABLED, ENTITY_AC_AWAY_ENABLED} <= disabled
+    assert not _smart_on_calls(mock_ha)
 
 
 def test_ac_away_enabled_toggle():

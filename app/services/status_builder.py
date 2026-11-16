@@ -79,8 +79,19 @@ def build_plug_power_freshness(
     *,
     stale_seconds: int = DEFAULT_AC_POWER_STALE_SECONDS,
     now: datetime | None = None,
+    plug_switch_unavailable: bool = False,
 ) -> tuple[str | None, float | None, bool]:
     """Return (power_updated_at KST ISO, power_age_seconds, power_stale)."""
+    power_state = str(plug_power_raw.get("state") or "").strip().lower()
+    if plug_switch_unavailable or _entity_state_unusable(power_state):
+        updated = _parse_ha_datetime(
+            plug_power_raw.get("last_updated") or plug_power_raw.get("last_changed")
+        )
+        if updated is None:
+            return None, None, True
+        current = now if now is not None else datetime.now(KST)
+        age = max(0.0, (current - updated).total_seconds())
+        return _ha_datetime_to_kst_iso(updated), age, True
     updated = _parse_ha_datetime(
         plug_power_raw.get("last_updated") or plug_power_raw.get("last_changed")
     )
@@ -401,8 +412,9 @@ def resolve_ac_running_confidence(
     power_stale: bool,
     running_source: AcPowerSource,
     power: AcPowerDisplay,
+    plug_switch_unavailable: bool = False,
 ) -> AcRunningConfidence:
-    if power_stale:
+    if plug_switch_unavailable or power_stale:
         return "low"
     if power == "on" and running_source == "plug":
         return "high"
@@ -448,11 +460,13 @@ def build_status_from_states(
     weather_raw = states.get(ENTITY_WEATHER, {})
 
     switch = _switch_state(plug_switch_raw.get("state"))
+    plug_switch_unavailable = switch == "unavailable"
     power_w = _parse_float(plug_power_raw.get("state"))
     energy_kwh = _parse_float(plug_energy_raw.get("state"))
     power_updated_at, power_age_seconds, power_stale = build_plug_power_freshness(
         plug_power_raw,
         stale_seconds=ac_power_stale_seconds,
+        plug_switch_unavailable=plug_switch_unavailable,
     )
 
     ac_auto_enabled = _build_ac_auto_enabled(states)
@@ -469,6 +483,7 @@ def build_status_from_states(
         power_stale=power_stale,
         running_source=running_source,
         power=power_display,
+        plug_switch_unavailable=plug_switch_unavailable,
     )
 
     weather_attrs = weather_raw.get("attributes") or {}

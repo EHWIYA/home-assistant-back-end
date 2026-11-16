@@ -408,6 +408,7 @@ async def get_ac_state(
 
     mode = status.ac_mode
     power_stale = bool(getattr(status.plug, "power_stale", False))
+    plug_switch_unavailable = getattr(status.plug, "switch", None) == "unavailable"
     power, running_source = resolve_ac_power(
         status.plug.power_w,
         ac_power_threshold_w=settings.ac_power_threshold_w,
@@ -435,6 +436,7 @@ async def get_ac_state(
             power_stale=power_stale,
             running_source=running_source,
             power=power,
+            plug_switch_unavailable=plug_switch_unavailable,
         )
 
     ha = HAClient(settings)
@@ -482,17 +484,22 @@ async def set_ac(
 
     ha = HAClient(settings)
 
-    auto_toggle, away_toggle = resolve_ac_mutex_toggles(
-        auto_enabled=body.auto_enabled,
-        away_enabled=body.away_enabled,
-        operating_mode=body.operating_mode,
-    )
-    ha_mode = resolve_ha_ac_mode(
-        mode=body.mode,
-        operating_mode=body.operating_mode,
-        auto_toggle=auto_toggle,
-        away_toggle=away_toggle,
-    )
+    # PWA/수동 IR 끄기(mode=off) → auto·away 즉시 해제. 재활성은 켜기 + 제어방식「자동」.
+    if body.mode == "off":
+        ha_mode = "off"
+        auto_toggle, away_toggle = False, False
+    else:
+        auto_toggle, away_toggle = resolve_ac_mutex_toggles(
+            auto_enabled=body.auto_enabled,
+            away_enabled=body.away_enabled,
+            operating_mode=body.operating_mode,
+        )
+        ha_mode = resolve_ha_ac_mode(
+            mode=body.mode,
+            operating_mode=body.operating_mode,
+            auto_toggle=auto_toggle,
+            away_toggle=away_toggle,
+        )
 
     initial_status = await fetch_status(settings)
     was_running = _ac_is_running_from_status(
@@ -682,7 +689,8 @@ async def set_ac(
         power_stale=bool(getattr(status.plug, "power_stale", False)),
     )
     toggled_mutex = (
-        body.operating_mode is not None
+        body.mode == "off"
+        or body.operating_mode is not None
         or body.auto_enabled is not None
         or body.away_enabled is not None
     )

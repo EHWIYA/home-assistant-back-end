@@ -115,6 +115,24 @@ def test_stale_plug_power_does_not_force_running():
     assert status.ac_running_confidence == "low"
 
 
+def test_unavailable_switch_cannot_validate_fresh_power_reading():
+    states = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    states["switch.hwiya_home"]["state"] = "unavailable"
+    states["sensor.hwiya_home_power"]["state"] = "742.0"
+    states["sensor.hwiya_home_power"]["last_updated"] = datetime.now(timezone.utc).isoformat()
+    status = _build(states)
+    assert status.plug.power_stale is True
+    assert status.ac_running_confidence == "low"
+
+
+def test_unavailable_power_is_stale_even_with_recent_timestamp():
+    now = datetime.now(timezone.utc)
+    _, _, stale = build_plug_power_freshness(
+        {"state": "unavailable", "last_updated": now.isoformat()}, now=now
+    )
+    assert stale is True
+
+
 def test_stale_plug_falls_back_to_logical():
     states = json.loads(FIXTURE.read_text(encoding="utf-8"))
     old = (datetime.now(timezone.utc) - timedelta(seconds=900)).isoformat()
