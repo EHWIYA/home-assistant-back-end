@@ -14,6 +14,10 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      connect_only:
+        description: Verify OIDC and NAS network access without deploying the API
+        type: boolean
+        default: false
       verify_current:
         description: Build and prepare the candidate, but redeploy the current production image
         type: boolean
@@ -103,14 +107,48 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
-      - name: Tailscale connect
-        uses: tailscale/github-action@v3
+      - uses: actions/checkout@v4
         with:
-          authkey: ${{ secrets.TS_AUTH_KEY }}
+          persist-credentials: false
+
+      - name: Verify OIDC identity and reject wrong audience
+        env:
+          TS_OIDC_CLIENT_ID: ${{ vars.TS_OIDC_CLIENT_ID }}
+          TS_OIDC_AUDIENCE: ${{ vars.TS_OIDC_AUDIENCE }}
+        run: python3 .github/scripts/check-tailscale-oidc.py
+
+      - name: Tailscale connect
+        uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4
+        with:
+          oauth-client-id: ${{ vars.TS_OIDC_CLIENT_ID }}
+          audience: ${{ vars.TS_OIDC_AUDIENCE }}
+          tags: tag:iot-ci
+
+      - name: Verify CI network isolation
+        env:
+          NAS_HOST: ${{ secrets.NAS_HOST }}
+        run: |
+          python3 - <<'PY'
+          import os, socket
+          host = os.environ['NAS_HOST']
+          with socket.create_connection((host, 22), timeout=15) as conn:
+              assert conn.recv(128).startswith(b'SSH-'), 'NAS SSH banner missing'
+          try:
+              conn = socket.create_connection((host, 443), timeout=4)
+          except (TimeoutError, OSError):
+              print('NAS TCP 22 reachable; TCP 443 denied')
+          else:
+              conn.close()
+              raise SystemExit('CI isolation failed: unexpected TCP 443 access')
+          PY
 
       - name: Deploy through NAS log preservation and maintenance gate
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.connect_only) }}
         env:
           NAS_HOST: ${{ secrets.NAS_HOST }}
           NAS_SSH_USER: ${{ secrets.NAS_SSH_USER }}

@@ -6,11 +6,11 @@ NAS `.env`는 **NAS `/home/iwh/apps/iot/api/.env`만** (서버 관리). Actions 
 
 ---
 
-## deploy-nas job (4개)
+## deploy-nas job
 
 | Secret | 설명 |
 |--------|------|
-| `TS_AUTH_KEY` | Tailscale auth key (Reusable + Ephemeral). **~90일 만료** → 아래 갱신 절차 |
+| `TS_AUTH_KEY` | 이전 인증 복구용으로 보존. 정상 OIDC workflow에서는 참조하지 않음 |
 | `NAS_HOST` | `100.88.40.125` (Tailscale IP). 공인 IP만 쓰면 hosted runner에서 timeout |
 | `NAS_SSH_USER` | `iwh` |
 | `NAS_SSH_KEY` | `github_actions_deploy` **private key** 전체 |
@@ -25,14 +25,20 @@ private key를 이 변수에 넣지 않는다. CI는 HostKeyAlias와 StrictHostK
 
 ---
 
-## TS_AUTH_KEY 만료 관리
+## Tailscale OIDC 인증
 
-| 시점 | 작업 |
-|------|------|
-| **발급일** | 캘린더에 **+75일** 알림 (만료 15일 전) |
-| **만료 15일 전** | Tailscale Admin → Keys → Reusable key 재발급 |
-| **갱신** | GitHub `TS_AUTH_KEY` Secret 덮어쓰기 → `workflow_dispatch` 로 deploy 테스트 |
-| **실패 징후** | GHA `Tailscale connect` 또는 SSH 단계 fail |
+Repository variables `TS_OIDC_CLIENT_ID`, `TS_OIDC_AUDIENCE`는 공개 식별자이며 비밀 키가 아니다.
+GitHub 실행별 단기 OIDC 증명을 Tailscale이 검증한다. 90일 auth key의 수동 갱신은 필요하지 않다.
+`deploy-nas` job에만 `id-token: write`를 부여하고 Tailscale Action은 검증한 v4 커밋에 고정한다.
+
+신뢰 조건은 이 저장소의 고정 ID·소유자 ID, main 브랜치 subject와
+`.github/workflows/deploy.yml@refs/heads/main`이다. credential은 Auth Keys Write와
+`tag:iot-ci`만 허용한다. CI 태그는 NAS TCP 22만 접근하며 기존 사용자 장치의 접근과
+Tailscale SSH·Funnel 규칙은 유지한다. 태그를 다른 장치에 추가하지 않는다.
+
+`.github/scripts/check-tailscale-oidc.py`는 실제 claims와 정상 토큰 교환 및 잘못된 audience의
+거부를 확인한다. JWT·access token을 출력하거나 보관하지 않는다. OIDC/Tailscale 장애 때
+auth key로 자동 우회하거나 권한을 확대하지 않는다. 복구는 배포 Runbook을 따른다.
 
 ---
 
