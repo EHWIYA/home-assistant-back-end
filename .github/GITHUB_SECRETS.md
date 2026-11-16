@@ -10,7 +10,6 @@ NAS `.env`는 **NAS `/home/iwh/apps/iot/api/.env`만** (서버 관리). Actions 
 
 | Secret | 설명 |
 |--------|------|
-| `TS_AUTH_KEY` | 이전 인증 복구용으로 보존. 정상 OIDC workflow에서는 참조하지 않음 |
 | `NAS_HOST` | `100.88.40.125` (Tailscale IP). 공인 IP만 쓰면 hosted runner에서 timeout |
 | `NAS_SSH_USER` | `iwh` |
 | `NAS_SSH_KEY` | `github_actions_deploy` **private key** 전체 |
@@ -39,6 +38,11 @@ Tailscale SSH·Funnel 규칙은 유지한다. 태그를 다른 장치에 추가�
 `.github/scripts/check-tailscale-oidc.py`는 실제 claims와 정상 토큰 교환 및 잘못된 audience의
 거부를 확인한다. JWT·access token을 출력하거나 보관하지 않는다. OIDC/Tailscale 장애 때
 auth key로 자동 우회하거나 권한을 확대하지 않는다. 복구는 배포 Runbook을 따른다.
+
+2026-11-17 후속 점검에서 기존 키의 발급·등록 기록, 다른 저장소의 secret 갱신 시각,
+현재 workflow와 NAS 자동화 참조를 확인한 뒤 이 저장소의 `TS_AUTH_KEY`를 삭제하고
+해당 Tailscale auth key를 폐기했다. 다른 저장소의 동명 secret은 별개의 이전 키라 보존했다.
+폐기된 키를 복구 수단으로 사용하지 않는다. OIDC credential과 공개 식별자는 유지한다.
 
 ---
 

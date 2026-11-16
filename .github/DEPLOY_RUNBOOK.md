@@ -24,8 +24,11 @@ Tailscale 연결·NAS SSH 포트 도달 및 HTTPS 포트 차단만 확인한다.
 
 OIDC 장애 시 먼저 CI를 보류하고 NAS 서비스 상태를 확인한다. 원문 로그 보존·정비 gate는
 변경하지 않는다. HDD snapshot `iot-ci-oidc-20261117`에 기존 workflow와 Tailscale 정책이
-있다. 보존한 `TS_AUTH_KEY`가 유효한 동안에는 검토 후 인증 단계만 기존 v3/authkey로
-복원할 수 있다. 기존 키는 자동 fallback으로 참조하지 않으며 검증 성공 전 삭제하지 않는다.
+있다. 후속 사용처 점검 및 사용자 승인에 따라 `TS_AUTH_KEY` secret과 해당 Tailscale 키는
+폐기했다. 과거 workflow를 그대로 복원하면 인증할 수 없으므로 OIDC 신뢰 조건·변수·접근
+정책과 GitHub/Tailscale 상태를 먼저 진단한다. 대체 인증 발급은 별도 승인·범위 확인 후
+수행하며 폐기된 키에 자동 fallback하지 않는다. 폐기 감사 자료는 HDD snapshot
+`iot-ts-auth-key-retirement-20261117`에 있다.
 정책 복구가 필요하면 승인된 기존 장치 접근·Funnel 상태와 새 CI 연결 영향을 함께 확인한다.
 OIDC credential의 수동 회수, 저장소/브랜치/워크플로 이동, SSH 키 또는 NAS GitHub 인증 만료는
 별도 대응이 필요하다. 정상 OIDC 운영에는 90일 Tailscale auth key 갱신이 필요하지 않다.
